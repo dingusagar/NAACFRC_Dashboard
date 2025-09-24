@@ -1,0 +1,122 @@
+/* Custom styles for the dashboard */
+
+:root {
+  --brand-color: #2b6cb0;
+  --muted: #6b7280;
+  --tab-bg: #fff;
+  --tab-shadow: 0 2px 12px #0001;
+  --card-bg: #fff;
+  --card-radius: 12px;
+  --card-shadow: 0 2px 12px #0001;
+}
+
+body {
+  background: #f8fafc;
+  color: #0f172a;
+  font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+  padding: 0;
+}
+
+.header {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  margin-bottom: 18px;
+}
+
+.brand {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--brand-color);
+  margin-bottom: 2px;
+}
+.brand-sub {
+  color: var(--muted);
+  font-size: 16px;
+}
+
+.page-title {
+  margin-bottom: 2px;
+  font-size: 22px;
+  font-weight: 600;
+}
+.lead {
+  margin-top: 0;
+  margin-bottom: 8px;
+  color: var(--muted);
+  font-size: 15px;
+}
+
+.tanf-content {
+  background: #f9fafb;
+  border-radius: 14px;
+  box-shadow: 0 4px 24px #0001;
+  padding: 24px 18px;
+  margin-bottom: 24px;
+}
+
+.placeholder-content {
+  background: var(--card-bg);
+  border-radius: var(--card-radius);
+  box-shadow: var(--card-shadow);
+  padding: 24px 18px;
+}
+
+.tab-content {
+  padding: 12px;
+}
+
+.dash-dropdown, .dash-dropdown * {
+  font-size: 15px !important;
+}
+
+.dash-graph {
+  background: var(--card-bg);
+  border-radius: var(--card-radius);
+  box-shadow: var(--card-shadow);
+}
+
+.dash-loading {
+  border-radius: var(--card-radius);
+}
+
+.dash-button, button {
+  background: #e2e8f0;
+  border-radius: 6px;
+  border: none;
+  padding: 6px 14px;
+  font-weight: 500;
+  box-shadow: 0 1px 4px #0001;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.dash-button:hover, button:hover {
+  background: #cbd5e1;
+}
+
+.dash-tabs {
+  background: var(--tab-bg);
+  border-radius: 10px;
+  box-shadow: var(--tab-shadow);
+  margin-bottom: 16px;
+}
+
+@media (max-width: 900px) {
+  .tanf-content {
+    padding: 12px 4px;
+  }
+  .placeholder-content {
+    padding: 12px 4px;
+  }
+}
+
+@media (max-width: 768px) {
+  .tanf-content > div {
+    flex-direction: column !important;
+    gap: 10px !important;
+  }
+  .header {
+    font-size: 20px;
+  }
+}

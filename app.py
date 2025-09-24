@@ -230,6 +230,9 @@ def make_map_figure(
 
     label = [k for k, v in metrics_label_map.items() if v == metric][0]
 
+    # Keep the label text as-is for the rotated annotation
+    vertical_label = str(label)
+
     # Main choropleth for counties with data
     fig = px.choropleth_mapbox(
         df_have if not df_have.empty else pd.DataFrame({"GEOID": []}),
@@ -264,6 +267,8 @@ def make_map_figure(
         ))
 
     # Draw county/state borders as a GeoJSON line layer on the mapbox
+    label = [k for k, v in metrics_label_map.items() if v == metric][0]
+
     fig.update_layout(
         margin={"r": 0, "t": 0, "l": 0, "b": 0},
         coloraxis_colorbar=dict(title=label) if not df_have.empty else {},
@@ -359,57 +364,80 @@ def build_layout(
         for geoid, name in sorted(geoid_to_name.items(), key=lambda kv: kv[1])
     ]
 
+    tanf_tab = html.Div([
+        html.Div([
+            html.Img(src="/assets/logo.png", style={"height": "44px", "marginRight": "16px", "borderRadius": "8px", "boxShadow": "0 2px 8px #0001"}),
+            html.Div([
+                html.H2("Georgia TANF Enrollment Trends", className="page-title", style={"marginBottom": "2px"}),
+                html.P("Pick a year/metric for the map. Click a county OR choose one from the dropdown to see its multi-year trend.", className="lead"),
+            ], style={"display": "flex", "flexDirection": "column"})
+        ], style={"display": "flex", "alignItems": "center", "gap": "12px", "marginBottom": "10px"}),
+
+        html.Div([
+            html.Label("Year", style={"fontWeight": 600, "marginRight": 8, "fontSize": "16px"}),
+            dcc.Dropdown(
+                id="year-dd",
+                options=[{"label": y, "value": y} for y in years],
+                value=years[-1] if years else None,
+                clearable=False,
+                style={"width": 140, "fontSize": "15px"}
+            ),
+            html.Label("Metric", style={"fontWeight": 600, "marginRight": 8, "marginLeft": 20, "fontSize": "16px"}),
+            dcc.Dropdown(
+                id="metric-dd",
+                options=[{"label": k, "value": v} for k, v in metrics_label_map.items()],
+                value="rate_pct",
+                clearable=False,
+                style={"width": 320, "fontSize": "15px"}
+            ),
+            html.Label("County", style={"fontWeight": 600, "marginRight": 8, "marginLeft": 20, "fontSize": "16px"}),
+            dcc.Dropdown(
+                id="county-dd",
+                options=county_options,
+                value=None,
+                clearable=True,
+                placeholder="Select a county…",
+                style={"width": 300, "fontSize": "15px"}
+            ),
+            html.Button("Clear selection", id="clear-selection", n_clicks=0, style={"marginLeft": 12, "background": "#e2e8f0", "borderRadius": "6px", "border": "none", "padding": "6px 14px", "fontWeight": 500, "boxShadow": "0 1px 4px #0001", "cursor": "pointer"}),
+            html.Span(id="missing-note", style={"marginLeft": 12, "color": "#555", "fontSize": "14px"})
+        ], style={"display": "flex", "alignItems": "center", "gap": "8px", "marginBottom": "12px", "flexWrap": "wrap", "background": "#fff", "borderRadius": "10px", "boxShadow": "0 2px 12px #0001", "padding": "14px 10px"}),
+
+        dcc.Loading(
+            id="map-loading",
+            type="circle",
+            children=dcc.Graph(id="map", style={"height": "60vh", "background": "#fff", "borderRadius": "12px", "boxShadow": "0 2px 12px #0001"}),
+            fullscreen=False,
+        ),
+
+        html.Hr(style={"marginTop": "24px", "marginBottom": "18px"}),
+        html.Div(id="trend-title", style={"fontWeight": 600, "marginBottom": 6, "fontSize": "17px"}),
+        dcc.Graph(id="trend", style={"height": "32vh", "background": "#fff", "borderRadius": "12px", "boxShadow": "0 2px 12px #0001"}),
+
+        dcc.Store(id="sel-geoid"),
+        dcc.Store(id="sel-name"),
+    ], className="tanf-content", style={"background": "#f9fafb", "borderRadius": "14px", "boxShadow": "0 4px 24px #0001", "padding": "24px 18px", "marginBottom": "24px"})
+
+    placeholder_tab = html.Div([
+        html.H3("Coming soon", style={"color": "#2b6cb0"}),
+        html.P("This dashboard is a placeholder for future content. Add your visualizations here.", style={"color": "#6b7280"}),
+    ], className="placeholder-content", style={"background": "#fff", "borderRadius": "10px", "boxShadow": "0 2px 12px #0001", "padding": "24px 18px"})
+
+    tabs = dcc.Tabs(id="top-tabs", value="tanf", children=[
+        dcc.Tab(label="TANF", value="tanf", children=tanf_tab, style={"fontWeight": 600, "fontSize": "16px"}),
+        dcc.Tab(label="Placeholder 1", value="ph1", children=placeholder_tab, style={"fontWeight": 600, "fontSize": "16px"}),
+        dcc.Tab(label="Placeholder 2", value="ph2", children=placeholder_tab, style={"fontWeight": 600, "fontSize": "16px"}),
+    ], style={"marginBottom": "16px", "background": "#fff", "borderRadius": "10px", "boxShadow": "0 2px 12px #0001"})
+
     return html.Div(
         style={"fontFamily": "Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
-               "margin": "0 auto", "maxWidth": "1100px", "padding": "24px"},
+               "margin": "0 auto", "maxWidth": "1200px", "padding": "18px", "background": "#f8fafc"},
         children=[
-            html.H2("Georgia TANF Enrollment Trends", style={"marginBottom": "8px"}),
-            html.P("Pick a year/metric for the map. Click a county OR choose one from the dropdown to see its multi-year trend."),
-
             html.Div([
-                html.Label("Year", style={"fontWeight": 600, "marginRight": 8}),
-                dcc.Dropdown(
-                    id="year-dd",
-                    options=[{"label": y, "value": y} for y in years],
-                    value=years[-1] if years else None,
-                    clearable=False,
-                    style={"width": 140}
-                ),
-                html.Label("Metric", style={"fontWeight": 600, "marginRight": 8, "marginLeft": 20}),
-                dcc.Dropdown(
-                    id="metric-dd",
-                    options=[{"label": k, "value": v} for k, v in metrics_label_map.items()],
-                    value="rate_pct",
-                    clearable=False,
-                    style={"width": 320}
-                ),
-                html.Label("County", style={"fontWeight": 600, "marginRight": 8, "marginLeft": 20}),
-                dcc.Dropdown(
-                    id="county-dd",
-                    options=county_options,
-                    value=None,
-                    clearable=True,
-                    placeholder="Select a county…",
-                    style={"width": 300}
-                ),
-                html.Button("Clear selection", id="clear-selection", n_clicks=0, style={"marginLeft": 12}),
-                html.Span(id="missing-note", style={"marginLeft": 12, "color": "#555"})
-            ], style={"display": "flex", "alignItems": "center", "gap": "8px",
-                      "marginBottom": "12px", "flexWrap": "wrap"}),
-
-            dcc.Loading(
-                id="map-loading",
-                type="circle",
-                children=dcc.Graph(id="map", style={"height": "60vh"}),
-                fullscreen=False,
-            ),
-
-            html.Hr(),
-            html.Div(id="trend-title", style={"fontWeight": 600, "marginBottom": 6}),
-            dcc.Graph(id="trend", style={"height": "32vh"}),
-
-            dcc.Store(id="sel-geoid"),
-            dcc.Store(id="sel-name"),
+                html.Div("GA Social Safety Net Dashboards", className="brand", style={"fontSize": "28px", "fontWeight": 700, "color": "#2b6cb0", "marginBottom": "2px"}),
+                html.Div("Insights and county-level trends", className="brand-sub", style={"color": "#6b7280", "fontSize": "16px"}),
+            ], className="header", style={"marginBottom": "18px"}),
+            tabs
         ]
     )
 
@@ -431,7 +459,7 @@ def register_callbacks(
         Input("metric-dd", "value")
     )
     def update_map(year, metric):
-        return make_map_figure(
+        fig, note = make_map_figure(
             df=df,
             geojson=geojson,
             geoid_to_name=geoid_to_name,
@@ -440,6 +468,7 @@ def register_callbacks(
             metrics_label_map=metrics_label_map,
             metric_fmt=metric_fmt,
         )
+        return fig, note
 
     @app.callback(
         Output("sel-geoid", "data"),
