@@ -150,13 +150,13 @@ def metrics_config() -> Tuple[Dict[str, str], Dict[str, str]]:
         METRICS (label->column), METRIC_FMT (column->'%' or 'count')
     """
     metrics = {
-        "% Black of Recipients": "rate_pct",
-        "% Black Recipients of Black Pop": "black_over_blackpop_pct",
-        "% Black Children in Poverty who got TANF": "children_poverty_pct",
-        "% Black Families in Poverty who got TANF": "families_poverty_pct",
-        "Black Recipients (count)": "Black Rec.",
-        "Total Recipients (count)": "Recipients",
-        "Black Population (count)": "black_population",
+        "Black Recipients as % of Total Recipients": "rate_pct",
+        "TANF Black Participation Rate (% of Black Population)": "black_over_blackpop_pct",
+        "TANF Coverage: Black Children in Poverty": "children_poverty_pct",
+        "TANF Coverage: Black Families in Poverty": "families_poverty_pct",
+        "Black Recipients": "Black Rec.",
+        "Total TANF Recipients": "Recipients",
+        "Total Black Population": "black_population",
     }
     metric_fmt = {
         "rate_pct": "%",
@@ -193,19 +193,22 @@ def make_map_figure(
     dfy["County"] = dfy["GEOID"].map(geoid_to_name)
 
     def fmt_count(v):
-        return f"{int(v):,}" if pd.notna(v) else "NA"
+        return f"{int(v):,}" if pd.notna(v) else "N/A"
 
     def fmt_pct(v):
-        return f"{v:.1f}%" if pd.notna(v) else "NA"
+        return f"{v:.1f}%" if pd.notna(v) else "N/A"
+    
     dfy["hover"] = (
-        "County: " + dfy["County"].fillna("NA") +
-        "<br>Black Pop.: " + dfy["black_population"].map(fmt_count) +
-        "<br>Recipients: " + dfy["Recipients"].map(fmt_count) +
-        "<br>Black Rec.: " + dfy["Black Rec."].map(fmt_count) +
-        "<br>% Black of Recipients: " + dfy["rate_pct"].map(fmt_pct) +
-        "<br>% Black Rec of Black Pop: " + dfy["black_over_blackpop_pct"].map(fmt_pct) +
-        "<br>% Black Children in Poverty who got TANF: " + dfy["children_poverty_pct"].map(fmt_pct) +
-        "<br>% Black Families in Poverty who got TANF: " + dfy["families_poverty_pct"].map(fmt_pct)
+        "<b style='color:#000; font-size:14px'>" + dfy["County"].fillna("Unknown") + " County</b><br><br>" +
+        "<b style='color:#1f2937'>Demographics:</b><br>" +
+        "<span style='color:#111'>👥 Black Population: <b>" + dfy["black_population"].map(fmt_count) + "</b></span><br>" +
+        "<span style='color:#111'>📊 Total Recipients: <b>" + dfy["Recipients"].map(fmt_count) + "</b></span><br>" +
+        "<span style='color:#111'>🎯 Black Recipients: <b>" + dfy["Black Rec."].map(fmt_count) + "</b></span><br><br>" +
+        "<b style='color:#1f2937'>Metrics:</b><br>" +
+        "<span style='color:#111'>📈 % Black of Recipients: <b style='color:#dc2626'>" + dfy["rate_pct"].map(fmt_pct) + "</b></span><br>" +
+        "<span style='color:#111'>📉 % Black Recipients of Black Pop: <b style='color:#dc2626'>" + dfy["black_over_blackpop_pct"].map(fmt_pct) + "</b></span><br>" +
+        "<span style='color:#111'>👶 % Black Children in Poverty (TANF): <b style='color:#dc2626'>" + dfy["children_poverty_pct"].map(fmt_pct) + "</b></span><br>" +
+        "<span style='color:#111'>👨‍👩‍👧‍👦 % Black Families in Poverty (TANF): <b style='color:#dc2626'>" + dfy["families_poverty_pct"].map(fmt_pct) + "</b></span>"
     )
 
     # Split counties with and without the chosen metric so missing ones can be shown in gray
@@ -213,7 +216,10 @@ def make_map_figure(
     df_missing = dfy[dfy[metric].isna()].copy()
     # Create a simple hover for missing counties: show county name and mention missing data
     if not df_missing.empty:
-        df_missing["hover_missing"] = "County: " + df_missing["County"].fillna("NA") + "<br>Data: Insufficient/Missing"
+        df_missing["hover_missing"] = (
+            "<b style='color:#000; font-size:14px'>" + df_missing["County"].fillna("Unknown") + " County</b><br><br>" +
+            "<b style='color:#dc2626'>⚠️ Data: Insufficient/Missing for this year</b>"
+        )
 
     n_total = len(dfy)
     n_missing = dfy[metric].isna().sum()
@@ -271,7 +277,25 @@ def make_map_figure(
 
     fig.update_layout(
         margin={"r": 0, "t": 0, "l": 0, "b": 0},
-        coloraxis_colorbar=dict(title=label) if not df_have.empty else {},
+        coloraxis_colorbar=dict(
+            title=dict(
+                text=label,
+                side="right",
+                font=dict(size=14, family="Inter")
+            ),
+            titleside="right",
+            title_font=dict(size=14, family="Inter"),
+            tickfont=dict(size=12, family="Inter"),
+            len=0.7,
+            thickness=15,
+            x=1.02
+        ) if not df_have.empty else {},
+        hoverlabel=dict(
+            bgcolor="rgba(255, 255, 255, 0.95)",
+            bordercolor="#e5e7eb",
+            font_size=13,
+            font_family="Inter"
+        ),
         mapbox={
             "style": "carto-positron",
             "center": {"lat": 32.5, "lon": -83.3},
@@ -281,8 +305,8 @@ def make_map_figure(
                     "sourcetype": "geojson",
                     "source": geojson,
                     "type": "line",
-                    "color": "#444",
-                    "line": {"width": 0.7},
+                    "color": "#6b7280",
+                    "line": {"width": 0.8},
                 }
             ],
         },
@@ -335,15 +359,66 @@ def make_trend_figure(
         return make_empty_trend(title_label), ""
 
     dfc = df[df["GEOID"] == sel_geoid].copy().sort_values("Year_num")
+    
+    # Create a shorter y-axis label for better space utilization
+    def shorten_label(label):
+        # Create abbreviated versions of long labels
+        label_mapping = {
+            "Black Recipients as % of Total Recipients": "% Black Recipients",
+            "TANF Black Participation Rate (% of Black Population)": "TANF Participation Rate (%)",
+            "TANF Coverage: Black Children in Poverty": "Coverage: Black Children (%)",
+            "TANF Coverage: Black Families in Poverty": "Coverage: Black Families (%)",
+        }
+        return label_mapping.get(label, label)
+    
+    short_label = shorten_label(title_label)
+    
     fig = px.line(dfc, x="year", y=metric, markers=True,
-                  labels={metric: title_label, "year": "Year"})
-    fig.update_layout(margin={"r": 0, "t": 0, "l": 0, "b": 0})
+                  labels={metric: short_label, "year": "Year"})
+    fig.update_layout(
+        margin={"r": 20, "t": 20, "l": 80, "b": 50},  # Increased left margin slightly
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
+        font=dict(family="Inter, system-ui, sans-serif", size=12),
+        xaxis=dict(
+            showgrid=True,
+            gridwidth=1,
+            gridcolor="#f3f4f6",
+            title_font=dict(size=14, family="Inter"),
+            title_standoff=25,
+            tickfont=dict(size=12),
+        ),
+        yaxis=dict(
+            showgrid=True,
+            gridwidth=1,
+            gridcolor="#f3f4f6",
+            title_font=dict(size=13, family="Inter"),  # Slightly smaller font
+            title_standoff=40,  # More space for longer labels
+            tickfont=dict(size=12),
+        ),
+        hoverlabel=dict(
+            bgcolor="rgba(255, 255, 255, 0.95)",
+            bordercolor="#e5e7eb",
+            font_size=13,
+            font_family="Inter"
+        )
+    )
 
     kind = metric_fmt.get(metric, "count")
     if kind == "%":
-        fig.update_traces(hovertemplate="Year %{x}<br>%{y:.2f}%<extra></extra>")
+        fig.update_traces(
+            hovertemplate="<b style='color:#000'>📅 Year: %{x}</b><br>" +
+                         "<b style='color:#000'>📊 Value: <span style='color:#dc2626; font-weight:bold'>%{y:.2f}%</span></b><extra></extra>",
+            line=dict(width=3, color='#2563eb'),
+            marker=dict(size=8, color='#2563eb', line=dict(width=2, color='#ffffff'))
+        )
     else:
-        fig.update_traces(hovertemplate="Year %{x}<br>%{y:,.0f}<extra></extra>")
+        fig.update_traces(
+            hovertemplate="<b style='color:#000'>📅 Year: %{x}</b><br>" +
+                         "<b style='color:#000'>📊 Count: <span style='color:#dc2626; font-weight:bold'>%{y:,.0f}</span></b><extra></extra>",
+            line=dict(width=3, color='#2563eb'),
+            marker=dict(size=8, color='#2563eb', line=dict(width=2, color='#ffffff'))
+        )
 
     return fig, f"Trend – {sel_name} County ({title_label})"
 
@@ -366,7 +441,7 @@ def build_layout(
 
     tanf_tab = html.Div([
         html.Div([
-            html.Img(src="/assets/logo.png", style={"height": "44px", "marginRight": "16px", "borderRadius": "8px", "boxShadow": "0 2px 8px #0001"}),
+            html.Img(src="/assets/logo.webp", style={"height": "44px", "marginRight": "16px", "borderRadius": "8px", "boxShadow": "0 2px 8px #0001"}),
             html.Div([
                 html.H2("Georgia TANF Enrollment Trends", className="page-title", style={"marginBottom": "2px"}),
                 html.P("Pick a year/metric for the map. Click a county OR choose one from the dropdown to see its multi-year trend.", className="lead"),
@@ -434,7 +509,7 @@ def build_layout(
                "margin": "0 auto", "maxWidth": "1200px", "padding": "18px", "background": "#f8fafc"},
         children=[
             html.Div([
-                html.Div("GA Social Safety Net Dashboards", className="brand", style={"fontSize": "28px", "fontWeight": 700, "color": "#2b6cb0", "marginBottom": "2px"}),
+                html.Div("GA Social Analytics Dashboard", className="brand", style={"fontSize": "28px", "fontWeight": 700, "color": "#2b6cb0", "marginBottom": "2px"}),
                 html.Div("Insights and county-level trends", className="brand-sub", style={"color": "#6b7280", "fontSize": "16px"}),
             ], className="header", style={"marginBottom": "18px"}),
             tabs
