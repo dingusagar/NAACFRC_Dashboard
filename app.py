@@ -213,13 +213,17 @@ def coi_metrics_config() -> Tuple[Dict[str, str], Dict[str, str]]:
         COI_METRICS (label->column), COI_METRIC_FMT (column->format type)
     """
     metrics = {
-        "Child Opportunity Index (State Z-Score)": "z_COI_stt",
-        "Child Opportunity Index (National Z-Score)": "z_COI_nat",
+        "Overall Child Opportunity Index (COI) Z-Score": "z_COI_stt",
+        "COI Z-Score - Education Domain": "z_ED_stt",
+        "COI Z-Score - Health & Environment Domain": "z_HE_stt",
+        "COI Z-Score - Social & Economic Domain": "z_SE_stt",
         "Population": "pop",
     }
     metric_fmt = {
         "z_COI_stt": "z-score",
-        "z_COI_nat": "z-score",
+        "z_ED_stt": "z-score",
+        "z_HE_stt": "z-score",
+        "z_SE_stt": "z-score",
         "pop": "count",
     }
     return metrics, metric_fmt
@@ -496,7 +500,7 @@ def make_coi_map_figure(
     # Ensure all counties appear, even if missing for that year
     base = pd.DataFrame({"GEOID": list(geoid_to_name.keys())})
     keep_cols = [
-        "GEOID", "county_name", "pop", "z_COI_stt", "z_COI_nat"
+        "GEOID", "county_name", "pop", "z_COI_stt", "z_ED_stt", "z_HE_stt", "z_SE_stt"
     ]
     dfy = base.merge(dfy[keep_cols], on="GEOID", how="left")
     dfy["County"] = dfy["GEOID"].map(geoid_to_name)
@@ -512,8 +516,10 @@ def make_coi_map_figure(
         "<b style='color:#1f2937'>Demographics:</b><br>" +
         "<span style='color:#111'>👥 Population: <b>" + dfy["pop"].map(fmt_count) + "</b></span><br><br>" +
         "<b style='color:#1f2937'>Child Opportunity Index Scores:</b><br>" +
-        "<span style='color:#111'>🎯 State Z-Score: <b style='color:#dc2626'>" + dfy["z_COI_stt"].map(fmt_zscore) + "</b></span><br>" +
-        "<span style='color:#111'>�🇸 National Z-Score: <b style='color:#dc2626'>" + dfy["z_COI_nat"].map(fmt_zscore) + "</b></span>"
+        "<span style='color:#111'>🎯 Overall COI: <b style='color:#dc2626'>" + dfy["z_COI_stt"].map(fmt_zscore) + "</b></span><br>" +
+        "<span style='color:#111'>📚 Education: <b style='color:#dc2626'>" + dfy["z_ED_stt"].map(fmt_zscore) + "</b></span><br>" +
+        "<span style='color:#111'>� Health & Environment: <b style='color:#dc2626'>" + dfy["z_HE_stt"].map(fmt_zscore) + "</b></span><br>" +
+        "<span style='color:#111'>👥 Social & Economic: <b style='color:#dc2626'>" + dfy["z_SE_stt"].map(fmt_zscore) + "</b></span>"
     )
 
     # Split counties with and without the chosen metric so missing ones can be shown in gray
@@ -668,10 +674,10 @@ def make_coi_trend_figure(
     def shorten_coi_label(label):
         # Create abbreviated versions of long labels
         label_mapping = {
-            "Child Opportunity Index (State Z-Score)": "COI Z-Score",
-            "Education Domain (State Z-Score)": "Education Z-Score",
-            "Health & Environment Domain (State Z-Score)": "Health & Environment Z-Score",
-            "Social & Economic Domain (State Z-Score)": "Social & Economic Z-Score",
+            "Overall Child Opportunity Index (COI) Z-Score": "Overall COI Z-Score",
+            "COI Z-Score - Education Domain": "Education Z-Score",
+            "COI Z-Score - Health & Environment Domain": "Health & Environment Z-Score",
+            "COI Z-Score - Social & Economic Domain": "Social & Economic Z-Score",
         }
         return label_mapping.get(label, label)
     
@@ -802,7 +808,12 @@ def build_layout(
 
         html.Hr(style={"marginTop": "24px", "marginBottom": "18px"}),
         html.Div(id="trend-title", style={"fontWeight": 600, "marginBottom": 6, "fontSize": "17px"}),
-        dcc.Graph(id="trend", style={"height": "32vh", "background": "#fff", "borderRadius": "12px", "boxShadow": "0 2px 12px #0001"}),
+        dcc.Loading(
+            id="trend-loading",
+            type="circle",
+            children=dcc.Graph(id="trend", style={"height": "32vh", "background": "#fff", "borderRadius": "12px", "boxShadow": "0 2px 12px #0001"}),
+            fullscreen=False,
+        ),
 
         dcc.Store(id="sel-geoid"),
         dcc.Store(id="sel-name"),
@@ -856,7 +867,12 @@ def build_layout(
 
         html.Hr(style={"marginTop": "24px", "marginBottom": "18px"}),
         html.Div(id="coi-trend-title", style={"fontWeight": 600, "marginBottom": 6, "fontSize": "17px"}),
-        dcc.Graph(id="coi-trend", style={"height": "32vh", "background": "#fff", "borderRadius": "12px", "boxShadow": "0 2px 12px #0001"}),
+        dcc.Loading(
+            id="coi-trend-loading",
+            type="circle",
+            children=dcc.Graph(id="coi-trend", style={"height": "32vh", "background": "#fff", "borderRadius": "12px", "boxShadow": "0 2px 12px #0001"}),
+            fullscreen=False,
+        ),
 
         dcc.Store(id="coi-sel-geoid"),
         dcc.Store(id="coi-sel-name"),
