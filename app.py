@@ -25,6 +25,7 @@ import plotly.graph_objects as go
 
 GEOJSON_PATH = Path("data/ga_counties.geojson")
 TANF_CSV     = Path("data/tanf_with_census.csv")
+COI_CSV      = Path("data/child_opportunity_index_georgia_filtered.csv")
 
 
 # ======================
@@ -144,6 +145,45 @@ def load_dataset(csv_path: Path,
     return df
 
 
+def load_coi_dataset(csv_path: Path,
+                     name_to_geoid: Dict[str, str]) -> pd.DataFrame:
+    """
+    Load the Child Opportunity Index CSV and prepare fields/metrics.
+    Expects columns:
+        state_fips, state_usps, state_name, county_fips, county_name, year, 
+        z_COI_stt (main metric), plus other COI-related metrics
+    """
+    df = pd.read_csv(csv_path, dtype={'county_fips': str, 'state_fips': str})
+    df.rename(columns={c: c.strip() for c in df.columns}, inplace=True)
+
+    # Data is already filtered for Georgia
+    
+    # Normalize county names
+    df["county_name"] = clean_county_name(df["county_name"])
+    df["year"] = df["year"].astype(str)
+    
+    # Create FIPS code - county_fips already contains the full 5-digit FIPS code
+    df["fips"] = df["county_fips"].astype(str)
+    
+    # Mapping key for the choropleth
+    df["GEOID"] = df["fips"]
+    # Fallback by name if any fips missing
+    miss = df["GEOID"].isna() | (df["GEOID"] == "")
+    df.loc[miss, "GEOID"] = df.loc[miss, "county_name"].map(name_to_geoid)
+
+    # One row per county-year (should already be this way)
+    df = (
+        df.sort_values(["county_name", "year"])
+          .drop_duplicates(subset=["county_name", "year"], keep="first")
+          .reset_index(drop=True)
+    )
+
+    # For sorting in line charts
+    df["Year_num"] = pd.to_numeric(df["year"], errors="coerce")
+
+    return df
+
+
 def metrics_config() -> Tuple[Dict[str, str], Dict[str, str]]:
     """
     Returns:
@@ -163,6 +203,24 @@ def metrics_config() -> Tuple[Dict[str, str], Dict[str, str]]:
         "black_over_blackpop_pct": "%",
         "children_poverty_pct": "%",
         "families_poverty_pct": "%",
+    }
+    return metrics, metric_fmt
+
+
+def coi_metrics_config() -> Tuple[Dict[str, str], Dict[str, str]]:
+    """
+    Returns:
+        COI_METRICS (label->column), COI_METRIC_FMT (column->format type)
+    """
+    metrics = {
+        "Child Opportunity Index (State Z-Score)": "z_COI_stt",
+        "Child Opportunity Index (National Z-Score)": "z_COI_nat",
+        "Population": "pop",
+    }
+    metric_fmt = {
+        "z_COI_stt": "z-score",
+        "z_COI_nat": "z-score",
+        "pop": "count",
     }
     return metrics, metric_fmt
 
@@ -423,6 +481,261 @@ def make_trend_figure(
     return fig, f"Trend – {sel_name} County ({title_label})"
 
 
+def make_coi_map_figure(
+    df: pd.DataFrame,
+    geojson: dict,
+    geoid_to_name: Dict[str, str],
+    year: str,
+    metric: str,
+    metrics_label_map: Dict[str, str],
+    metric_fmt: Dict[str, str],
+) -> Tuple[go.Figure, str]:
+    """Build the choropleth map for COI data and the 'missing data' note."""
+    dfy = df[df["year"] == str(year)].copy()
+
+    # Ensure all counties appear, even if missing for that year
+    base = pd.DataFrame({"GEOID": list(geoid_to_name.keys())})
+    keep_cols = [
+        "GEOID", "county_name", "pop", "z_COI_stt", "z_COI_nat"
+    ]
+    dfy = base.merge(dfy[keep_cols], on="GEOID", how="left")
+    dfy["County"] = dfy["GEOID"].map(geoid_to_name)
+
+    def fmt_count(v):
+        return f"{int(v):,}" if pd.notna(v) else "N/A"
+
+    def fmt_zscore(v):
+        return f"{v:.3f}" if pd.notna(v) else "N/A"
+    
+    dfy["hover"] = (
+        "<b style='color:#000; font-size:14px'>" + dfy["County"].fillna("Unknown") + " County</b><br><br>" +
+        "<b style='color:#1f2937'>Demographics:</b><br>" +
+        "<span style='color:#111'>👥 Population: <b>" + dfy["pop"].map(fmt_count) + "</b></span><br><br>" +
+        "<b style='color:#1f2937'>Child Opportunity Index Scores:</b><br>" +
+        "<span style='color:#111'>🎯 State Z-Score: <b style='color:#dc2626'>" + dfy["z_COI_stt"].map(fmt_zscore) + "</b></span><br>" +
+        "<span style='color:#111'>�🇸 National Z-Score: <b style='color:#dc2626'>" + dfy["z_COI_nat"].map(fmt_zscore) + "</b></span>"
+    )
+
+    # Split counties with and without the chosen metric so missing ones can be shown in gray
+    df_have = dfy[dfy[metric].notna()].copy()
+    df_missing = dfy[dfy[metric].isna()].copy()
+    # Create a simple hover for missing counties: show county name and mention missing data
+    if not df_missing.empty:
+        df_missing["hover_missing"] = (
+            "<b style='color:#000; font-size:14px'>" + df_missing["County"].fillna("Unknown") + " County</b><br><br>" +
+            "<b style='color:#dc2626'>⚠️ Data: Insufficient/Missing for this year</b>"
+        )
+
+    n_total = len(dfy)
+    n_missing = dfy[metric].isna().sum()
+    note = f"{n_missing}/{n_total} counties missing."
+
+    kind = metric_fmt.get(metric, "z-score")
+    if kind == "z-score":
+        # For z-scores, use a diverging color scale centered at 0
+        # Determine symmetric range
+        if df_have[metric].notna().any():
+            vmax = float(np.nanpercentile(np.abs(df_have[metric]), 95))
+            vmax = max(vmax, 0.5)  # Minimum range for visibility
+        else:
+            vmax = 2.0
+        color_scale = "RdBu_r"  # Red for negative (worse), Blue for positive (better)
+        vmin = -vmax
+    elif kind == "count":
+        vmin = 0
+        vmax = float(np.nanpercentile(df_have[metric], 98)) if df_have[metric].notna().any() else 1.0
+        vmax = max(vmax, 1.0)
+        color_scale = "Blues"
+    else:
+        vmin = 0
+        vmax = float(np.nanpercentile(df_have[metric], 98)) if df_have[metric].notna().any() else 100.0
+        color_scale = "Viridis"
+
+    label = [k for k, v in metrics_label_map.items() if v == metric][0]
+
+    # Main choropleth for counties with data
+    if not df_have.empty:
+        fig = px.choropleth_mapbox(
+            df_have,
+            geojson=geojson,
+            locations="GEOID",
+            featureidkey="properties.GEOID",
+            color=metric,
+            color_continuous_scale=color_scale,
+            range_color=(vmin, vmax) if kind == "z-score" else (0, vmax),
+            hover_name="County",
+            hover_data=None,
+            labels={metric: label},
+            mapbox_style="carto-positron",
+            center={"lat": 32.5, "lon": -83.3},
+            zoom=5.7,
+            opacity=0.86,
+        )
+    else:
+        # Create empty map when no data available
+        fig = go.Figure(go.Choroplethmapbox())
+        fig.update_layout(
+            mapbox_style="carto-positron",
+            mapbox_center={"lat": 32.5, "lon": -83.3},
+            mapbox_zoom=5.7,
+        )
+
+    # Add a gray layer for missing counties (so they appear on the map and have hover info)
+    if not df_missing.empty:
+        # Use a Choroplethmapbox trace with a uniform z so it shows as gray
+        fig.add_trace(go.Choroplethmapbox(
+            geojson=geojson,
+            locations=df_missing["GEOID"],
+            z=[0] * len(df_missing),
+            featureidkey="properties.GEOID",
+            colorscale=[[0, "lightgray"], [1, "lightgray"]],
+            showscale=False,
+            marker_opacity=0.86,
+            marker_line_width=0,
+        ))
+
+    fig.update_layout(
+        margin={"r": 0, "t": 0, "l": 0, "b": 0},
+        coloraxis_colorbar=dict(
+            title=dict(
+                text=label,
+                side="right",
+                font=dict(size=14, family="Inter")
+            ),
+            titleside="right",
+            title_font=dict(size=14, family="Inter"),
+            tickfont=dict(size=12, family="Inter"),
+            len=0.7,
+            thickness=15,
+            x=1.02
+        ) if not df_have.empty else {},
+        hoverlabel=dict(
+            bgcolor="rgba(255, 255, 255, 0.95)",
+            bordercolor="#e5e7eb",
+            font_size=13,
+            font_family="Inter"
+        ),
+        mapbox={
+            "style": "carto-positron",
+            "center": {"lat": 32.5, "lon": -83.3},
+            "zoom": 5.7,
+            "layers": [
+                {
+                    "sourcetype": "geojson",
+                    "source": geojson,
+                    "type": "line",
+                    "color": "#6b7280",
+                    "line": {"width": 0.8},
+                }
+            ],
+        },
+    )
+
+    # Set customdata and hovertemplate explicitly for both traces (main and missing)
+    try:
+        if not df_have.empty:
+            main_custom = df_have["hover"].fillna("County: NA<br>Data: Missing").to_numpy().reshape(-1, 1).tolist()
+            fig.data[0].customdata = main_custom
+            fig.data[0].hovertemplate = "%{customdata[0]}<extra></extra>"
+        if not df_missing.empty:
+            # missing trace was appended as the last trace
+            miss_custom = df_missing["hover_missing"].to_numpy().reshape(-1, 1).tolist()
+            fig.data[-1].customdata = miss_custom
+            fig.data[-1].hovertemplate = "%{customdata[0]}<extra></extra>"
+    except Exception:
+        # Fallback: do nothing if assignment fails
+        pass
+
+    return fig, note
+
+
+def make_coi_trend_figure(
+    df: pd.DataFrame,
+    sel_geoid: str,
+    sel_name: str,
+    metric: str,
+    metrics_label_map: Dict[str, str],
+    metric_fmt: Dict[str, str],
+) -> Tuple[go.Figure, str]:
+    """Build the COI line chart for a selected county."""
+    title_label = [k for k, v in metrics_label_map.items() if v == metric][0]
+    if not sel_geoid:
+        return make_empty_trend(title_label), ""
+
+    dfc = df[df["GEOID"] == sel_geoid].copy().sort_values("Year_num")
+    
+    # Create a shorter y-axis label for better space utilization
+    def shorten_coi_label(label):
+        # Create abbreviated versions of long labels
+        label_mapping = {
+            "Child Opportunity Index (State Z-Score)": "COI Z-Score",
+            "Education Domain (State Z-Score)": "Education Z-Score",
+            "Health & Environment Domain (State Z-Score)": "Health & Environment Z-Score",
+            "Social & Economic Domain (State Z-Score)": "Social & Economic Z-Score",
+        }
+        return label_mapping.get(label, label)
+    
+    short_label = shorten_coi_label(title_label)
+    
+    fig = px.line(dfc, x="year", y=metric, markers=True,
+                  labels={metric: short_label, "year": "Year"})
+    fig.update_layout(
+        margin={"r": 20, "t": 20, "l": 80, "b": 50},
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
+        font=dict(family="Inter, system-ui, sans-serif", size=12),
+        xaxis=dict(
+            showgrid=True,
+            gridwidth=1,
+            gridcolor="#f3f4f6",
+            title_font=dict(size=14, family="Inter"),
+            title_standoff=25,
+            tickfont=dict(size=12),
+        ),
+        yaxis=dict(
+            showgrid=True,
+            gridwidth=1,
+            gridcolor="#f3f4f6",
+            title_font=dict(size=13, family="Inter"),
+            title_standoff=40,
+            tickfont=dict(size=12),
+        ),
+        hoverlabel=dict(
+            bgcolor="rgba(255, 255, 255, 0.95)",
+            bordercolor="#e5e7eb",
+            font_size=13,
+            font_family="Inter"
+        )
+    )
+
+    kind = metric_fmt.get(metric, "count")
+    if kind == "z-score":
+        fig.update_traces(
+            hovertemplate="<b style='color:#000'>📅 Year: %{x}</b><br>" +
+                         "<b style='color:#000'>📊 Z-Score: <span style='color:#dc2626; font-weight:bold'>%{y:.3f}</span></b><extra></extra>",
+            line=dict(width=3, color='#2563eb'),
+            marker=dict(size=8, color='#2563eb', line=dict(width=2, color='#ffffff'))
+        )
+        # Add a horizontal line at y=0 for reference
+        fig.add_hline(y=0, line_dash="dash", line_color="gray", opacity=0.5)
+    elif kind == "count":
+        fig.update_traces(
+            hovertemplate="<b style='color:#000'>📅 Year: %{x}</b><br>" +
+                         "<b style='color:#000'>📊 Count: <span style='color:#dc2626; font-weight:bold'>%{y:,.0f}</span></b><extra></extra>",
+            line=dict(width=3, color='#2563eb'),
+            marker=dict(size=8, color='#2563eb', line=dict(width=2, color='#ffffff'))
+        )
+    else:
+        fig.update_traces(
+            hovertemplate="<b style='color:#000'>📅 Year: %{x}</b><br>" +
+                         "<b style='color:#000'>📊 Value: <span style='color:#dc2626; font-weight:bold'>%{y:.2f}</span></b><extra></extra>",
+            line=dict(width=3, color='#2563eb'),
+            marker=dict(size=8, color='#2563eb', line=dict(width=2, color='#ffffff'))
+        )
+
+    return fig, f"Trend – {sel_name} County ({title_label})"
+
+
 # ======================
 # App Factory
 # ======================
@@ -430,8 +743,10 @@ def make_trend_figure(
 def build_layout(
     app: dash.Dash,
     years: List[str],
+    coi_years: List[str],
     geoid_to_name: Dict[str, str],
-    metrics_label_map: Dict[str, str]
+    metrics_label_map: Dict[str, str],
+    coi_metrics_label_map: Dict[str, str]
 ) -> html.Div:
     """Construct the static Dash layout."""
     county_options = [
@@ -493,6 +808,60 @@ def build_layout(
         dcc.Store(id="sel-name"),
     ], className="tanf-content", style={"background": "#f9fafb", "borderRadius": "14px", "boxShadow": "0 4px 24px #0001", "padding": "24px 18px", "marginBottom": "24px"})
 
+    coi_tab = html.Div([
+        html.Div([
+            html.Img(src="/assets/logo.webp", style={"height": "44px", "marginRight": "16px", "borderRadius": "8px", "boxShadow": "0 2px 8px #0001"}),
+            html.Div([
+                html.H2("Georgia Child Opportunity Index", className="page-title", style={"marginBottom": "2px"}),
+                html.P("Pick a year/metric for the map. Click a county OR choose one from the dropdown to see its multi-year trend.", className="lead"),
+            ], style={"display": "flex", "flexDirection": "column"})
+        ], style={"display": "flex", "alignItems": "center", "gap": "12px", "marginBottom": "10px"}),
+
+        html.Div([
+            html.Label("Year", style={"fontWeight": 600, "marginRight": 8, "fontSize": "16px"}),
+            dcc.Dropdown(
+                id="coi-year-dd",
+                options=[{"label": y, "value": y} for y in coi_years],
+                value=coi_years[-1] if coi_years else None,
+                clearable=False,
+                style={"width": 140, "fontSize": "15px"}
+            ),
+            html.Label("Metric", style={"fontWeight": 600, "marginRight": 8, "marginLeft": 20, "fontSize": "16px"}),
+            dcc.Dropdown(
+                id="coi-metric-dd",
+                options=[{"label": k, "value": v} for k, v in coi_metrics_label_map.items()],
+                value="z_COI_stt",
+                clearable=False,
+                style={"width": 320, "fontSize": "15px"}
+            ),
+            html.Label("County", style={"fontWeight": 600, "marginRight": 8, "marginLeft": 20, "fontSize": "16px"}),
+            dcc.Dropdown(
+                id="coi-county-dd",
+                options=county_options,
+                value=None,
+                clearable=True,
+                placeholder="Select a county…",
+                style={"width": 300, "fontSize": "15px"}
+            ),
+            html.Button("Clear selection", id="coi-clear-selection", n_clicks=0, style={"marginLeft": 12, "background": "#e2e8f0", "borderRadius": "6px", "border": "none", "padding": "6px 14px", "fontWeight": 500, "boxShadow": "0 1px 4px #0001", "cursor": "pointer"}),
+            html.Span(id="coi-missing-note", style={"marginLeft": 12, "color": "#555", "fontSize": "14px"})
+        ], style={"display": "flex", "alignItems": "center", "gap": "8px", "marginBottom": "12px", "flexWrap": "wrap", "background": "#fff", "borderRadius": "10px", "boxShadow": "0 2px 12px #0001", "padding": "14px 10px"}),
+
+        dcc.Loading(
+            id="coi-map-loading",
+            type="circle",
+            children=dcc.Graph(id="coi-map", style={"height": "60vh", "background": "#fff", "borderRadius": "12px", "boxShadow": "0 2px 12px #0001"}),
+            fullscreen=False,
+        ),
+
+        html.Hr(style={"marginTop": "24px", "marginBottom": "18px"}),
+        html.Div(id="coi-trend-title", style={"fontWeight": 600, "marginBottom": 6, "fontSize": "17px"}),
+        dcc.Graph(id="coi-trend", style={"height": "32vh", "background": "#fff", "borderRadius": "12px", "boxShadow": "0 2px 12px #0001"}),
+
+        dcc.Store(id="coi-sel-geoid"),
+        dcc.Store(id="coi-sel-name"),
+    ], className="coi-content", style={"background": "#f9fafb", "borderRadius": "14px", "boxShadow": "0 4px 24px #0001", "padding": "24px 18px", "marginBottom": "24px"})
+
     placeholder_tab = html.Div([
         html.H3("Coming soon", style={"color": "#2b6cb0"}),
         html.P("This dashboard is a placeholder for future content. Add your visualizations here.", style={"color": "#6b7280"}),
@@ -500,8 +869,8 @@ def build_layout(
 
     tabs = dcc.Tabs(id="top-tabs", value="tanf", children=[
         dcc.Tab(label="TANF", value="tanf", children=tanf_tab, style={"fontWeight": 600, "fontSize": "16px"}),
-        dcc.Tab(label="Placeholder 1", value="ph1", children=placeholder_tab, style={"fontWeight": 600, "fontSize": "16px"}),
-        dcc.Tab(label="Placeholder 2", value="ph2", children=placeholder_tab, style={"fontWeight": 600, "fontSize": "16px"}),
+        dcc.Tab(label="Child Opportunity Index", value="coi", children=coi_tab, style={"fontWeight": 600, "fontSize": "16px"}),
+        dcc.Tab(label="Placeholder", value="ph1", children=placeholder_tab, style={"fontWeight": 600, "fontSize": "16px"}),
     ], style={"marginBottom": "16px", "background": "#fff", "borderRadius": "10px", "boxShadow": "0 2px 12px #0001"})
 
     return html.Div(
@@ -520,10 +889,13 @@ def build_layout(
 def register_callbacks(
     app: dash.Dash,
     df: pd.DataFrame,
+    coi_df: pd.DataFrame,
     geojson: dict,
     geoid_to_name: Dict[str, str],
     metrics_label_map: Dict[str, str],
     metric_fmt: Dict[str, str],
+    coi_metrics_label_map: Dict[str, str],
+    coi_metric_fmt: Dict[str, str],
 ):
     """Wire all Dash callbacks."""
 
@@ -595,22 +967,95 @@ def register_callbacks(
         )
         return fig, title
 
+    # COI Callbacks
+    @app.callback(
+        Output("coi-map", "figure"),
+        Output("coi-missing-note", "children"),
+        Input("coi-year-dd", "value"),
+        Input("coi-metric-dd", "value")
+    )
+    def update_coi_map(year, metric):
+        fig, note = make_coi_map_figure(
+            df=coi_df,
+            geojson=geojson,
+            geoid_to_name=geoid_to_name,
+            year=year,
+            metric=metric,
+            metrics_label_map=coi_metrics_label_map,
+            metric_fmt=coi_metric_fmt,
+        )
+        return fig, note
+
+    @app.callback(
+        Output("coi-sel-geoid", "data"),
+        Output("coi-sel-name", "data"),
+        Output("coi-county-dd", "value"),
+        Input("coi-map", "clickData"),
+        Input("coi-county-dd", "value"),
+        Input("coi-clear-selection", "n_clicks"),
+        prevent_initial_call=True,
+    )
+    def sync_coi_selection(clickData, dd_value, _clear_clicks):
+        ctx = dash.callback_context
+        if not ctx.triggered:
+            raise dash.exceptions.PreventUpdate
+
+        trigger = ctx.triggered[0]["prop_id"].split(".")[0]
+
+        if trigger == "coi-clear-selection":
+            return None, None, None
+
+        if trigger == "coi-county-dd":
+            if dd_value is None:
+                return None, None, None
+            name = geoid_to_name.get(dd_value)
+            return dd_value, name, dd_value
+
+        if trigger == "coi-map" and clickData and "points" in clickData and clickData["points"]:
+            geoid = clickData["points"][0].get("location")
+            name = geoid_to_name.get(geoid)
+            return geoid, name, geoid
+
+        raise dash.exceptions.PreventUpdate
+
+    @app.callback(
+        Output("coi-trend", "figure"),
+        Output("coi-trend-title", "children"),
+        Input("coi-sel-geoid", "data"),
+        Input("coi-sel-name", "data"),
+        Input("coi-metric-dd", "value"),
+    )
+    def update_coi_trend(sel_geoid, sel_name, metric):
+        fig, title = make_coi_trend_figure(
+            df=coi_df,
+            sel_geoid=sel_geoid,
+            sel_name=sel_name,
+            metric=metric,
+            metrics_label_map=coi_metrics_label_map,
+            metric_fmt=coi_metric_fmt,
+        )
+        return fig, title
+
 
 def create_app(geojson_path: Path = GEOJSON_PATH,
-               csv_path: Path = TANF_CSV) -> dash.Dash:
+               csv_path: Path = TANF_CSV,
+               coi_csv_path: Path = COI_CSV) -> dash.Dash:
     """
     App factory. Loads data, builds layout, and registers callbacks.
     Returns a ready-to-run Dash app.
     """
     geojson, name_to_geoid, geoid_to_name = load_geojson(geojson_path)
     df = load_dataset(csv_path, name_to_geoid)
+    coi_df = load_coi_dataset(coi_csv_path, name_to_geoid)
     metrics, metric_fmt = metrics_config()
+    coi_metrics, coi_metric_fmt = coi_metrics_config()
     years = sorted(df["year"].dropna().unique())
+    coi_years = sorted(coi_df["year"].dropna().unique())
 
     app = dash.Dash(__name__)
-    app.title = "GA TANF – County Dropdown + Click Trend"
-    app.layout = build_layout(app, years, geoid_to_name, metrics)
-    register_callbacks(app, df, geojson, geoid_to_name, metrics, metric_fmt)
+    app.title = "GA Social Analytics Dashboard"
+    app.layout = build_layout(app, years, coi_years, geoid_to_name, metrics, coi_metrics)
+    register_callbacks(app, df, coi_df, geojson, geoid_to_name, metrics, metric_fmt, coi_metrics, coi_metric_fmt)
     return app
 
 
