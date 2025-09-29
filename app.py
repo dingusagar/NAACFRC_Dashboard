@@ -229,6 +229,145 @@ def coi_metrics_config() -> Tuple[Dict[str, str], Dict[str, str]]:
     return metrics, metric_fmt
 
 
+def get_metric_descriptions() -> Dict[str, str]:
+    """
+    Returns descriptions for TANF metrics explaining what each metric means.
+    """
+    return {
+        "rate_pct": "Percentage of all TANF recipients in a county who are Black. This shows the racial composition of TANF beneficiaries.",
+        "black_over_blackpop_pct": "Percentage of the Black population in a county that receives TANF benefits. This measures TANF participation rates within the Black community.",
+        "children_poverty_pct": "Percentage of Black children living in poverty who receive TANF benefits. This shows how well TANF reaches Black children in need.",
+        "families_poverty_pct": "Percentage of Black families living in poverty who receive TANF benefits. This measures TANF coverage among Black families facing economic hardship.",
+        "Black Rec.": "Total number of Black individuals receiving TANF benefits in the county. This is the raw count of Black TANF recipients.",
+        "Recipients": "Total number of individuals receiving TANF benefits in the county, regardless of race. This shows overall TANF caseload size.",
+        "black_population": "Total Black population in the county according to census data. This provides demographic context for understanding TANF participation rates."
+    }
+
+
+def get_coi_metric_descriptions() -> Dict[str, str]:
+    """
+    Returns descriptions for Child Opportunity Index metrics explaining what each metric means.
+    """
+    return {
+        "z_COI_stt": "Overall measure of child opportunity in the county relative to the state average. Positive scores indicate better opportunities, negative scores indicate fewer opportunities.",
+        "z_ED_stt": "Education domain score measuring access to quality schools, school readiness programs, and educational resources relative to the state average.",
+        "z_HE_stt": "Health & Environment score measuring access to healthcare, environmental quality, and health-promoting resources relative to the state average.",
+        "z_SE_stt": "Social & Economic score measuring family economic security, neighborhood safety, and social capital relative to the state average.",
+        "pop": "Total population of the county. This provides demographic context for understanding the Child Opportunity Index scores and their impact."
+    }
+
+
+def get_county_rankings(
+    df: pd.DataFrame,
+    geoid_to_name: Dict[str, str],
+    year: str,
+    metric: str,
+    metric_fmt: Dict[str, str],
+    n_counties: int = 5
+) -> Tuple[List[Dict], List[Dict]]:
+    """
+    Get top and bottom performing counties for a given metric and year.
+    
+    Args:
+        df: DataFrame with county data
+        geoid_to_name: Mapping from GEOID to county name
+        year: Year to filter data
+        metric: Metric column name
+        metric_fmt: Formatting information for metrics
+        n_counties: Number of top/bottom counties to return
+    
+    Returns:
+        Tuple of (top_counties, bottom_counties) lists with dicts containing 'county' and 'value'
+    """
+    # Filter data for the specified year
+    dfy = df[df["year"] == str(year)].copy()
+    
+    # Remove rows with missing values for the metric
+    dfy = dfy[dfy[metric].notna()].copy()
+    
+    if dfy.empty:
+        return [], []
+    
+    # Add county names
+    dfy["County"] = dfy["GEOID"].map(geoid_to_name).fillna("Unknown")
+    
+    # Sort by metric value
+    dfy_sorted = dfy.sort_values(metric, ascending=False)
+    
+    # Get top and bottom counties
+    top_counties = []
+    bottom_counties = []
+    
+    # Format values based on metric type
+    kind = metric_fmt.get(metric, "count")
+    
+    def format_value(val):
+        if pd.isna(val):
+            return "N/A"
+        if kind == "%":
+            return f"{val:.1f}%"
+        elif kind == "z-score":
+            return f"{val:.2f}"
+        else:
+            return f"{int(val):,}"
+    
+    # Top performing counties
+    for _, row in dfy_sorted.head(n_counties).iterrows():
+        top_counties.append({
+            'county': row['County'],
+            'value': format_value(row[metric])
+        })
+    
+    # Bottom performing counties  
+    for _, row in dfy_sorted.tail(n_counties).iterrows():
+        bottom_counties.append({
+            'county': row['County'],
+            'value': format_value(row[metric])
+        })
+    
+    # Reverse bottom counties so worst is first
+    bottom_counties.reverse()
+    
+    return top_counties, bottom_counties
+
+
+def create_ranking_display(counties: List[Dict], title: str, icon: str, is_top: bool = True) -> html.Div:
+    """
+    Create a formatted display for county rankings.
+    
+    Args:
+        counties: List of dicts with 'county' and 'value' keys
+        title: Title for the ranking section
+        icon: Emoji icon to display
+        is_top: Whether these are top performers (affects styling)
+    
+    Returns:
+        HTML div with formatted county rankings
+    """
+    color_class = "top-performer" if is_top else "bottom-performer"
+    
+    if not counties:
+        return html.Div([
+            html.H4([icon, " ", title]),
+            html.P("No data available", style={"color": "#6b7280", "fontSize": "14px", "margin": "0"})
+        ], className=color_class)
+    
+    county_items = []
+    for i, county_info in enumerate(counties, 1):
+        county_items.append(
+            html.Div([
+                html.Span(f"{i}.", className="county-rank"),
+                html.Span(county_info['county'], className="county-name"),
+                html.Span(county_info['value'], className="county-value")
+            ], className="county-ranking-item")
+        )
+    
+    return html.Div([
+        html.H4([icon, " ", title]),
+        html.Div(county_items)
+    ], className=color_class)
+
+
 # ======================
 # Figure Builders
 # ======================
@@ -799,6 +938,11 @@ def build_layout(
             html.Span(id="missing-note", style={"marginLeft": 12, "color": "#555", "fontSize": "14px"})
         ], style={"display": "flex", "alignItems": "center", "gap": "8px", "marginBottom": "12px", "flexWrap": "wrap", "background": "#fff", "borderRadius": "10px", "boxShadow": "0 2px 12px #0001", "padding": "14px 10px"}),
 
+        html.Div([
+            html.Span("ℹ️", className="description-icon"),
+            html.Span(id="metric-description")
+        ], id="metric-description-container"),
+
         dcc.Loading(
             id="map-loading",
             type="circle",
@@ -814,6 +958,22 @@ def build_layout(
             children=dcc.Graph(id="trend", style={"height": "32vh", "background": "#fff", "borderRadius": "12px", "boxShadow": "0 2px 12px #0001"}),
             fullscreen=False,
         ),
+
+        html.Hr(style={"marginTop": "24px", "marginBottom": "18px"}),
+        html.Div([
+            html.H3("County Performance Rankings", style={"fontSize": "18px", "fontWeight": "600", "marginBottom": "16px", "color": "#1f2937"}),
+            html.Div([
+                html.Div(id="top-counties-tanf", style={"flex": "1", "minWidth": "280px"}),
+                html.Div(id="bottom-counties-tanf", style={"flex": "1", "minWidth": "280px"})
+            ], style={"display": "flex", "gap": "24px", "flexWrap": "wrap"})
+        ], style={"background": "#fff", "borderRadius": "12px", "boxShadow": "0 2px 12px #0001", "padding": "20px"}),
+
+        # Citation box for TANF
+        html.Div([
+            html.Span("📚", className="citation-icon"),
+            html.Span("Citation:", className="citation-label"),
+            html.Span("[TANF data citation to be added]", className="citation-text citation-placeholder")
+        ], className="citation-box"),
 
         dcc.Store(id="sel-geoid"),
         dcc.Store(id="sel-name"),
@@ -858,6 +1018,11 @@ def build_layout(
             html.Span(id="coi-missing-note", style={"marginLeft": 12, "color": "#555", "fontSize": "14px"})
         ], style={"display": "flex", "alignItems": "center", "gap": "8px", "marginBottom": "12px", "flexWrap": "wrap", "background": "#fff", "borderRadius": "10px", "boxShadow": "0 2px 12px #0001", "padding": "14px 10px"}),
 
+        html.Div([
+            html.Span("ℹ️", className="description-icon"),
+            html.Span(id="coi-metric-description")
+        ], id="coi-metric-description-container"),
+
         dcc.Loading(
             id="coi-map-loading",
             type="circle",
@@ -874,19 +1039,41 @@ def build_layout(
             fullscreen=False,
         ),
 
+        html.Hr(style={"marginTop": "24px", "marginBottom": "18px"}),
+        html.Div([
+            html.H3("County Performance Rankings", style={"fontSize": "18px", "fontWeight": "600", "marginBottom": "16px", "color": "#1f2937"}),
+            html.Div([
+                html.Div(id="top-counties-coi", style={"flex": "1", "minWidth": "280px"}),
+                html.Div(id="bottom-counties-coi", style={"flex": "1", "minWidth": "280px"})
+            ], style={"display": "flex", "gap": "24px", "flexWrap": "wrap"})
+        ], style={"background": "#fff", "borderRadius": "12px", "boxShadow": "0 2px 12px #0001", "padding": "20px"}),
+
+        # Citation box for COI
+        html.Div([
+            html.Div([
+                html.Span("📚", className="citation-icon"),
+                html.Span("Citation:", className="citation-label"),
+            ], style={"marginBottom": "8px"}),
+            html.Div([
+                html.Div("diversitydatakids.org. 2025.", className="citation-text", style={"marginBottom": "4px"}),
+                html.Div("\"Child Opportunity Index 3.0-2023 County-Level Data.\"", className="citation-text", style={"marginBottom": "4px", "fontStyle": "italic"}),
+                html.Div([
+                    html.A("https://www.diversitydatakids.org/research-library/child-opportunity-index-30-2023-county-data", 
+                           href="https://www.diversitydatakids.org/research-library/child-opportunity-index-30-2023-county-data",
+                           target="_blank",
+                           className="citation-text",
+                           style={"color": "#2563eb", "textDecoration": "underline"})
+                ])
+            ])
+        ], className="citation-box"),
+
         dcc.Store(id="coi-sel-geoid"),
         dcc.Store(id="coi-sel-name"),
     ], className="coi-content", style={"background": "#f9fafb", "borderRadius": "14px", "boxShadow": "0 4px 24px #0001", "padding": "24px 18px", "marginBottom": "24px"})
 
-    placeholder_tab = html.Div([
-        html.H3("Coming soon", style={"color": "#2b6cb0"}),
-        html.P("This dashboard is a placeholder for future content. Add your visualizations here.", style={"color": "#6b7280"}),
-    ], className="placeholder-content", style={"background": "#fff", "borderRadius": "10px", "boxShadow": "0 2px 12px #0001", "padding": "24px 18px"})
-
     tabs = dcc.Tabs(id="top-tabs", value="tanf", children=[
         dcc.Tab(label="TANF", value="tanf", children=tanf_tab, style={"fontWeight": 600, "fontSize": "16px"}),
         dcc.Tab(label="Child Opportunity Index", value="coi", children=coi_tab, style={"fontWeight": 600, "fontSize": "16px"}),
-        dcc.Tab(label="Placeholder", value="ph1", children=placeholder_tab, style={"fontWeight": 600, "fontSize": "16px"}),
     ], style={"marginBottom": "16px", "background": "#fff", "borderRadius": "10px", "boxShadow": "0 2px 12px #0001"})
 
     return html.Div(
@@ -983,7 +1170,104 @@ def register_callbacks(
         )
         return fig, title
 
+    @app.callback(
+        Output("metric-description", "children"),
+        Input("metric-dd", "value")
+    )
+    def update_metric_description(metric):
+        """Update the TANF metric description text when a metric is selected."""
+        descriptions = get_metric_descriptions()
+        return descriptions.get(metric, "Select a metric to see its description.")
+
+    @app.callback(
+        [Output("top-counties-tanf", "children"),
+         Output("bottom-counties-tanf", "children")],
+        [Input("year-dd", "value"),
+         Input("metric-dd", "value")]
+    )
+    def update_tanf_rankings(year, metric):
+        """Update the TANF county rankings when year or metric changes."""
+        if not year or not metric:
+            return html.Div(), html.Div()
+        
+        # Get metric label for display
+        metric_label = [k for k, v in metrics_label_map.items() if v == metric][0] if metric else "Unknown Metric"
+        
+        top_counties, bottom_counties = get_county_rankings(
+            df=df,
+            geoid_to_name=geoid_to_name,
+            year=year,
+            metric=metric,
+            metric_fmt=metric_fmt,
+            n_counties=5
+        )
+        
+        top_display = create_ranking_display(
+            counties=top_counties,
+            title=f"Top 5 Counties - {metric_label}",
+            icon="🏆",
+            is_top=True
+        )
+        
+        bottom_display = create_ranking_display(
+            counties=bottom_counties,
+            title=f"Bottom 5 Counties - {metric_label}",
+            icon="🔻",
+            is_top=False
+        )
+        
+        return top_display, bottom_display
+
     # COI Callbacks
+    @app.callback(
+        Output("coi-metric-description", "children"),
+        Input("coi-metric-dd", "value")
+    )
+    def update_coi_metric_description(metric):
+        """Update the COI metric description text when a metric is selected."""
+        descriptions = get_coi_metric_descriptions()
+        return descriptions.get(metric, "Select a metric to see its description.")
+
+    @app.callback(
+        [Output("top-counties-coi", "children"),
+         Output("bottom-counties-coi", "children")],
+        [Input("coi-year-dd", "value"),
+         Input("coi-metric-dd", "value")]
+    )
+    def update_coi_rankings(year, metric):
+        """Update the COI county rankings when year or metric changes."""
+        if not year or not metric:
+            return html.Div(), html.Div()
+        
+        # Get metric label for display
+        metric_label = [k for k, v in coi_metrics_label_map.items() if v == metric][0] if metric else "Unknown Metric"
+        
+        top_counties, bottom_counties = get_county_rankings(
+            df=coi_df,
+            geoid_to_name=geoid_to_name,
+            year=year,
+            metric=metric,
+            metric_fmt=coi_metric_fmt,
+            n_counties=5
+        )
+        
+        top_display = create_ranking_display(
+            counties=top_counties,
+            title=f"Top 5 Counties - {metric_label}",
+            icon="🏆",
+            is_top=True
+        )
+        
+        bottom_display = create_ranking_display(
+            counties=bottom_counties,
+            title=f"Bottom 5 Counties - {metric_label}", 
+            icon="🔻",
+            is_top=False
+        )
+        
+        
+        return top_display, bottom_display
+
     @app.callback(
         Output("coi-map", "figure"),
         Output("coi-missing-note", "children"),
