@@ -29,19 +29,11 @@ def filter_child_opportunity_data():
     print(f"Columns in original dataset: {list(df.columns)}")
     
     # Filter for Georgia
-    georgia_df = df[df['state_name'] == 'Georgia'].copy()
+    filtered_df = df[df['state_name'] == 'Georgia'].copy()
     
-    print(f"Georgia dataset shape after state filter: {georgia_df.shape}")
+    print(f"Georgia dataset shape after state filter: {filtered_df.shape}")
     
-    # Get the first 12 columns
-    first_12_columns = df.columns[:12].tolist()
-    print(f"First 12 columns: {first_12_columns}")
-    
-    # Keep only the first 12 columns
-    filtered_df = georgia_df[first_12_columns].copy()
-    
-    print(f"Final filtered dataset shape: {filtered_df.shape}")
-    
+
     # Save the filtered dataset
     filtered_df.to_csv(output_file, index=False)
     

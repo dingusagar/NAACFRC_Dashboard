@@ -368,6 +368,65 @@ def create_ranking_display(counties: List[Dict], title: str, icon: str, is_top: 
     ], className=color_class)
 
 
+def calculate_state_averages(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Calculate state-wide averages for each year by aggregating county data.
+    Uses appropriate aggregation methods for each metric type.
+    
+    Args:
+        df: DataFrame with county-level data
+    
+    Returns:
+        DataFrame with state averages by year
+    """
+    # Group by year and calculate state totals
+    state_data = []
+    
+    for year in df['year'].unique():
+        year_data = df[df['year'] == year].copy()
+        
+        # Remove rows with missing data for core calculations
+        year_data = year_data.dropna(subset=['Recipients', 'Black Rec.', 'black_population'])
+        
+        if len(year_data) == 0:
+            continue
+            
+        # Sum totals across all counties
+        total_recipients = year_data['Recipients'].sum()
+        total_black_recipients = year_data['Black Rec.'].sum()
+        total_black_population = year_data['black_population'].sum()
+        
+        # Sum additional metrics if available
+        total_black_children = year_data['Black Children'].sum() if 'Black Children' in year_data.columns else np.nan
+        total_black_families = year_data['Black Families'].sum() if 'Black Families' in year_data.columns else np.nan
+        total_black_children_poverty = year_data['black_children_poverty'].sum() if 'black_children_poverty' in year_data.columns else np.nan
+        total_black_families_poverty = year_data['black_families_poverty'].sum() if 'black_families_poverty' in year_data.columns else np.nan
+        
+        # Calculate state-level percentages using proper aggregation
+        state_rate_pct = (total_black_recipients / total_recipients * 100) if total_recipients > 0 else np.nan
+        state_black_over_blackpop_pct = (total_black_recipients / total_black_population * 100) if total_black_population > 0 else np.nan
+        state_children_poverty_pct = (total_black_children / total_black_children_poverty * 100) if total_black_children_poverty > 0 else np.nan
+        state_families_poverty_pct = (total_black_families / total_black_families_poverty * 100) if total_black_families_poverty > 0 else np.nan
+        
+        state_data.append({
+            'year': year,
+            'Recipients': total_recipients,
+            'Black Rec.': total_black_recipients,
+            'black_population': total_black_population,
+            'Black Children': total_black_children,
+            'Black Families': total_black_families,
+            'black_children_poverty': total_black_children_poverty,
+            'black_families_poverty': total_black_families_poverty,
+            'rate_pct': state_rate_pct,
+            'black_over_blackpop_pct': state_black_over_blackpop_pct,
+            'children_poverty_pct': state_children_poverty_pct,
+            'families_poverty_pct': state_families_poverty_pct,
+            'Year_num': pd.to_numeric(year, errors='coerce')
+        })
+    
+    return pd.DataFrame(state_data)
+
+
 # ======================
 # Figure Builders
 # ======================
@@ -561,6 +620,9 @@ def make_trend_figure(
 
     dfc = df[df["GEOID"] == sel_geoid].copy().sort_values("Year_num")
     
+    # Calculate state averages for baseline
+    state_averages = calculate_state_averages(df)
+    
     # Create a shorter y-axis label for better space utilization
     def shorten_label(label):
         # Create abbreviated versions of long labels
@@ -574,14 +636,39 @@ def make_trend_figure(
     
     short_label = shorten_label(title_label)
     
-    fig = px.line(dfc, x="year", y=metric, markers=True,
-                  labels={metric: short_label, "year": "Year"})
+    # Create figure with both county and state data
+    fig = go.Figure()
+    
+    # Add county trend line
+    fig.add_trace(go.Scatter(
+        x=dfc["year"],
+        y=dfc[metric],
+        mode='lines+markers',
+        name=f'{sel_name} County',
+        line=dict(width=3, color='#2563eb'),
+        marker=dict(size=8, color='#2563eb', line=dict(width=2, color='#ffffff')),
+    ))
+    
+    # Add state average baseline if we have state data
+    if not state_averages.empty and metric in state_averages.columns:
+        state_data = state_averages.dropna(subset=[metric])
+        if not state_data.empty:
+            fig.add_trace(go.Scatter(
+                x=state_data["year"],
+                y=state_data[metric],
+                mode='lines',
+                name='Georgia Average',
+                line=dict(width=2, color='#dc2626', dash='dash'),
+                opacity=0.7,
+            ))
+    # Update layout
     fig.update_layout(
-        margin={"r": 20, "t": 20, "l": 80, "b": 50},  # Increased left margin slightly
+        margin={"r": 20, "t": 20, "l": 80, "b": 50},
         plot_bgcolor="rgba(0,0,0,0)",
         paper_bgcolor="rgba(0,0,0,0)",
         font=dict(family="Inter, system-ui, sans-serif", size=12),
         xaxis=dict(
+            title="Year",
             showgrid=True,
             gridwidth=1,
             gridcolor="#f3f4f6",
@@ -590,11 +677,12 @@ def make_trend_figure(
             tickfont=dict(size=12),
         ),
         yaxis=dict(
+            title=short_label,
             showgrid=True,
             gridwidth=1,
             gridcolor="#f3f4f6",
-            title_font=dict(size=13, family="Inter"),  # Slightly smaller font
-            title_standoff=40,  # More space for longer labels
+            title_font=dict(size=13, family="Inter"),
+            title_standoff=40,
             tickfont=dict(size=12),
         ),
         hoverlabel=dict(
@@ -602,24 +690,43 @@ def make_trend_figure(
             bordercolor="#e5e7eb",
             font_size=13,
             font_family="Inter"
+        ),
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1,
+            font=dict(size=12, family="Inter")
         )
     )
 
+    # Update hover templates based on metric type
     kind = metric_fmt.get(metric, "count")
     if kind == "%":
+        # Update county trace hover
         fig.update_traces(
-            hovertemplate="<b style='color:#000'>📅 Year: %{x}</b><br>" +
-                         "<b style='color:#000'>📊 Value: <span style='color:#dc2626; font-weight:bold'>%{y:.2f}%</span></b><extra></extra>",
-            line=dict(width=3, color='#2563eb'),
-            marker=dict(size=8, color='#2563eb', line=dict(width=2, color='#ffffff'))
+            hovertemplate="<b>📅 Year: %{x}</b><br><b>📊 %{fullData.name}: <span style='color:#2563eb'>%{y:.2f}%</span></b><extra></extra>",
+            selector=dict(name=f'{sel_name} County')
         )
+        # Update state average trace hover if it exists
+        if len(fig.data) > 1:
+            fig.update_traces(
+                hovertemplate="<b>📅 Year: %{x}</b><br><b>📊 %{fullData.name}: <span style='color:#dc2626'>%{y:.2f}%</span></b><extra></extra>",
+                selector=dict(name='Georgia Average')
+            )
     else:
+        # Update county trace hover
         fig.update_traces(
-            hovertemplate="<b style='color:#000'>📅 Year: %{x}</b><br>" +
-                         "<b style='color:#000'>📊 Count: <span style='color:#dc2626; font-weight:bold'>%{y:,.0f}</span></b><extra></extra>",
-            line=dict(width=3, color='#2563eb'),
-            marker=dict(size=8, color='#2563eb', line=dict(width=2, color='#ffffff'))
+            hovertemplate="<b>📅 Year: %{x}</b><br><b>📊 %{fullData.name}: <span style='color:#2563eb'>%{y:,.0f}</span></b><extra></extra>",
+            selector=dict(name=f'{sel_name} County')
         )
+        # Update state average trace hover if it exists
+        if len(fig.data) > 1:
+            fig.update_traces(
+                hovertemplate="<b>📅 Year: %{x}</b><br><b>📊 %{fullData.name}: <span style='color:#dc2626'>%{y:,.0f}</span></b><extra></extra>",
+                selector=dict(name='Georgia Average')
+            )
 
     return fig, f"Trend – {sel_name} County ({title_label})"
 

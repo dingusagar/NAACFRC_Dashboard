@@ -56,12 +56,7 @@ body {
   margin-bottom: 24px;
 }
 
-.placeholder-content {
-  background: var(--card-bg);
-  border-radius: var(--card-radius);
-  box-shadow: var(--card-shadow);
-  padding: 24px 18px;
-}
+
 
 .tab-content {
   padding: 12px;
@@ -106,9 +101,163 @@ body {
   .tanf-content {
     padding: 12px 4px;
   }
-  .placeholder-content {
-    padding: 12px 4px;
-  }
+
+}
+
+/* Metric description boxes */
+#metric-description-container, #coi-metric-description-container {
+  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: flex-start;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  transition: all 0.2s ease-in-out;
+}
+
+#metric-description-container:hover, #coi-metric-description-container:hover {
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.15);
+  border-color: #93c5fd;
+}
+
+#metric-description, #coi-metric-description {
+  font-size: 14px;
+  color: #374151;
+  line-height: 1.5;
+  font-weight: 400;
+}
+
+.description-icon {
+  font-size: 18px;
+  margin-right: 8px;
+  color: #2563eb;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+/* County ranking styles */
+.top-performer {
+  background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%);
+  border: 1px solid #bbf7d0;
+  border-radius: 8px;
+  padding: 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.bottom-performer {
+  background: linear-gradient(135deg, #fef2f2 0%, #fef7f7 100%);
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  padding: 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.top-performer h4 {
+  color: #166534;
+  margin: 0 0 12px 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.bottom-performer h4 {
+  color: #991b1b;
+  margin: 0 0 12px 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.county-ranking-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  font-size: 14px;
+}
+
+.county-ranking-item:last-child {
+  border-bottom: none;
+}
+
+.county-rank {
+  font-weight: 600;
+  margin-right: 8px;
+  color: #6b7280;
+  font-size: 14px;
+  min-width: 20px;
+}
+
+.county-name {
+  font-weight: 500;
+  margin-right: auto;
+  color: #374151;
+}
+
+.county-value {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.top-performer .county-value {
+  color: #059669;
+}
+
+.bottom-performer .county-value {
+  color: #dc2626;
+}
+
+/* Citation box styles */
+.citation-box {
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 16px;
+  margin-top: 20px;
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+.citation-box:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+.citation-icon {
+  font-size: 16px;
+  margin-right: 8px;
+  color: #2563eb;
+  vertical-align: middle;
+}
+
+.citation-label {
+  font-weight: 600;
+  font-size: 14px;
+  color: #1f2937;
+  margin-right: 8px;
+  vertical-align: middle;
+}
+
+.citation-text {
+  font-size: 14px;
+  color: #6b7280;
+  line-height: 1.5;
+}
+
+.citation-text a {
+  color: #2563eb;
+  text-decoration: underline;
+  word-break: break-all;
+}
+
+.citation-text a:hover {
+  color: #1d4ed8;
+  text-decoration: underline;
+}
+
+.citation-placeholder {
+  font-style: italic;
+  color: #9ca3af;
 }
 
 @media (max-width: 768px) {
@@ -119,4 +268,50 @@ body {
   .header {
     font-size: 20px;
   }
+  
+  #metric-description-container, #coi-metric-description-container {
+    padding: 10px;
+    margin-bottom: 10px;
+  }
+  
+  #metric-description, #coi-metric-description {
+    font-size: 13px;
+  }
+
+  .top-performer, .bottom-performer {
+    padding: 12px;
+    margin-bottom: 16px;
+  }
+
+  .county-ranking-item {
+    font-size: 13px;
+    padding: 4px 0;
+  }
+
+  .county-name {
+    font-size: 13px;
+  }
+
+  .county-value {
+    font-size: 13px;
+  }
+
+  .citation-box {
+    padding: 10px;
+    margin-top: 16px;
+  }
+
+  .citation-text, .citation-label {
+    font-size: 13px;
+  }
+}
+
+/* Legend styling for trend charts */
+.js-plotly-plot .legend {
+  font-family: 'Inter', system-ui, sans-serif !important;
+}
+
+.js-plotly-plot .legend text {
+  font-size: 12px !important;
+  font-family: 'Inter', system-ui, sans-serif !important;
 }
