@@ -500,10 +500,10 @@ def make_map_figure(
         "<span style='color:#111'>Total Recipients: <b>" + dfy["Recipients"].map(fmt_count) + "</b></span><br>" +
         "<span style='color:#111'>Black Recipients: <b>" + dfy["Black Rec."].map(fmt_count) + "</b></span><br><br>" +
         "<b style='color:#1f2937'>Metrics:</b><br>" +
-        "<span style='color:#111'>% Black of Recipients: <b style='color:#dc2626'>" + dfy["rate_pct"].map(fmt_pct) + "</b></span><br>" +
-        "<span style='color:#111'>% Black Recipients of Black Pop: <b style='color:#dc2626'>" + dfy["black_over_blackpop_pct"].map(fmt_pct) + "</b></span><br>" +
-        "<span style='color:#111'>% Black Children in Poverty (TANF): <b style='color:#dc2626'>" + dfy["children_poverty_pct"].map(fmt_pct) + "</b></span><br>" +
-        "<span style='color:#111'>% Black Families in Poverty (TANF): <b style='color:#dc2626'>" + dfy["families_poverty_pct"].map(fmt_pct) + "</b></span>"
+        "<span style='color:#111'>% Black of Recipients: <b style='color:#1f2937'>" + dfy["rate_pct"].map(fmt_pct) + "</b></span><br>" +
+        "<span style='color:#111'>% Black Recipients of Black Pop: <b style='color:#1f2937'>" + dfy["black_over_blackpop_pct"].map(fmt_pct) + "</b></span><br>" +
+        "<span style='color:#111'>% Black Children in Poverty (TANF): <b style='color:#1f2937'>" + dfy["children_poverty_pct"].map(fmt_pct) + "</b></span><br>" +
+        "<span style='color:#111'>% Black Families in Poverty (TANF): <b style='color:#1f2937'>" + dfy["families_poverty_pct"].map(fmt_pct) + "</b></span>"
     )
 
     # Split counties with and without the chosen metric so missing ones can be shown in gray
@@ -867,7 +867,7 @@ def make_trend_figure(
         # Update state average trace hover if it exists
         if len(fig.data) > 1:
             fig.update_traces(
-                hovertemplate="<b>📅 Year: %{x}</b><br><b>📊 %{fullData.name}: <span style='color:#dc2626'>%{y:.2f}%</span></b><extra></extra>",
+                hovertemplate="<b>📅 Year: %{x}</b><br><b>📊 %{fullData.name}: <span style='color:#1f2937'>%{y:.2f}%</span></b><extra></extra>",
                 selector=dict(name='Georgia Average')
             )
     else:
@@ -879,7 +879,7 @@ def make_trend_figure(
         # Update state average trace hover if it exists
         if len(fig.data) > 1:
             fig.update_traces(
-                hovertemplate="<b>📅 Year: %{x}</b><br><b>📊 %{fullData.name}: <span style='color:#dc2626'>%{y:,.0f}</span></b><extra></extra>",
+                hovertemplate="<b>📅 Year: %{x}</b><br><b>📊 %{fullData.name}: <span style='color:#1f2937'>%{y:,.0f}</span></b><extra></extra>",
                 selector=dict(name='Georgia Average')
             )
 
@@ -1222,7 +1222,7 @@ def build_layout(
 
         dcc.Loading(
             id="map-loading",
-            type="circle",
+            type="dot",
             children=dcc.Graph(id="map", style={"height": "60vh", "background": "#fff", "borderRadius": "12px", "boxShadow": "0 2px 12px #0001"}),
             fullscreen=False,
         ),
@@ -1231,7 +1231,7 @@ def build_layout(
         html.Div(id="trend-title", style={"fontWeight": 600, "marginBottom": 6, "fontSize": "17px"}),
         dcc.Loading(
             id="trend-loading",
-            type="circle",
+            type="default",
             children=dcc.Graph(id="trend", style={"height": "32vh", "background": "#fff", "borderRadius": "12px", "boxShadow": "0 2px 12px #0001"}),
             fullscreen=False,
         ),
@@ -1305,7 +1305,7 @@ def build_layout(
 
         dcc.Loading(
             id="coi-map-loading",
-            type="circle",
+            type="dot",
             children=dcc.Graph(id="coi-map", style={"height": "60vh", "background": "#fff", "borderRadius": "12px", "boxShadow": "0 2px 12px #0001"}),
             fullscreen=False,
         ),
@@ -1314,7 +1314,7 @@ def build_layout(
         html.Div(id="coi-trend-title", style={"fontWeight": 600, "marginBottom": 6, "fontSize": "17px"}),
         dcc.Loading(
             id="coi-trend-loading",
-            type="circle",
+            type="default",
             children=dcc.Graph(id="coi-trend", style={"height": "32vh", "background": "#fff", "borderRadius": "12px", "boxShadow": "0 2px 12px #0001"}),
             fullscreen=False,
         ),
