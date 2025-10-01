@@ -192,9 +192,9 @@ def metrics_config() -> Tuple[Dict[str, str], Dict[str, str]]:
     metrics = {
         "Black Recipients as % of Total Recipients": "rate_pct",
         "TANF Black Participation Rate (% of Black Population)": "black_over_blackpop_pct",
-        "TANF Coverage: Black Children in Poverty": "children_poverty_pct",
-        "TANF Coverage: Black Families in Poverty": "families_poverty_pct",
-        "Black Recipients": "Black Rec.",
+        "Percentage Black Children in Poverty who received TANF": "children_poverty_pct",
+        "Percentage Black Families in Poverty who received TANF": "families_poverty_pct",
+        "Black TANF Recipients Count": "Black Rec.",
         "Total TANF Recipients": "Recipients",
         "Total Black Population": "black_population",
     }
@@ -629,8 +629,8 @@ def make_trend_figure(
         label_mapping = {
             "Black Recipients as % of Total Recipients": "% Black Recipients",
             "TANF Black Participation Rate (% of Black Population)": "TANF Participation Rate (%)",
-            "TANF Coverage: Black Children in Poverty": "Coverage: Black Children (%)",
-            "TANF Coverage: Black Families in Poverty": "Coverage: Black Families (%)",
+            "Percentage Black Children in Poverty who received TANF": "% Black Children in Poverty (TANF)",
+            "Percentage Black Families in Poverty who received TANF": "% Black Families in Poverty (TANF)",
         }
         return label_mapping.get(label, label)
     
@@ -1009,38 +1009,44 @@ def build_layout(
     tanf_tab = html.Div([
         html.Div([
             html.H2("Georgia TANF Enrollment Trends", className="page-title", style={"marginBottom": "2px"}),
-            html.P("Pick a year/metric for the map. Click a county OR choose one from the dropdown to see its multi-year trend.", className="lead"),
+            html.P([
+                "Temporary Assistance for Needy Families (TANF) is the monthly cash assistance program, with an employment services component, for low-income families with children under age 18, children of age 18 and attending school full-time, and pregnant women. ",
+                html.A("Learn more", href="https://dfcs.georgia.gov/services/temporary-assistance-needy-families", target="_blank", style={"color": "#2563eb", "textDecoration": "underline"})
+            ], style={"fontSize": "14px", "color": "#4b5563", "marginBottom": "8px", "fontStyle": "italic"}),
         ], style={"marginBottom": "10px"}),
 
         html.Div([
-            html.Label("Year", style={"fontWeight": 600, "marginRight": 8, "fontSize": "16px"}),
-            dcc.Dropdown(
-                id="year-dd",
-                options=[{"label": y, "value": y} for y in years],
-                value=years[-1] if years else None,
-                clearable=False,
-                style={"width": 140, "fontSize": "15px"}
-            ),
-            html.Label("Metric", style={"fontWeight": 600, "marginRight": 8, "marginLeft": 20, "fontSize": "16px"}),
-            dcc.Dropdown(
-                id="metric-dd",
-                options=[{"label": k, "value": v} for k, v in metrics_label_map.items()],
-                value="rate_pct",
-                clearable=False,
-                style={"width": 320, "fontSize": "15px"}
-            ),
-            html.Label("County", style={"fontWeight": 600, "marginRight": 8, "marginLeft": 20, "fontSize": "16px"}),
-            dcc.Dropdown(
-                id="county-dd",
-                options=county_options,
-                value=None,
-                clearable=True,
-                placeholder="Select a county…",
-                style={"width": 300, "fontSize": "15px"}
-            ),
-            html.Button("Clear selection", id="clear-selection", n_clicks=0, style={"marginLeft": 12, "background": "#e2e8f0", "borderRadius": "6px", "border": "none", "padding": "6px 14px", "fontWeight": 500, "boxShadow": "0 1px 4px #0001", "cursor": "pointer"}),
-            html.Span(id="missing-note", style={"marginLeft": 12, "color": "#555", "fontSize": "14px"})
-        ], style={"display": "flex", "alignItems": "center", "gap": "8px", "marginBottom": "12px", "flexWrap": "wrap", "background": "#fff", "borderRadius": "10px", "boxShadow": "0 2px 12px #0001", "padding": "14px 10px"}),
+            html.P("Pick a year/metric for the map. Click a county OR choose one from the dropdown to see its multi-year trend.", className="lead", style={"margin": "0 0 16px 0", "fontSize": "15px", "paddingBottom": "12px", "borderBottom": "1px solid #e5e7eb"}),
+            html.Div([
+                html.Label("Year", style={"fontWeight": 600, "marginRight": 8, "fontSize": "16px"}),
+                dcc.Dropdown(
+                    id="year-dd",
+                    options=[{"label": y, "value": y} for y in years],
+                    value=years[-1] if years else None,
+                    clearable=False,
+                    style={"width": 140, "fontSize": "15px"}
+                ),
+                html.Label("Metric", style={"fontWeight": 600, "marginRight": 8, "marginLeft": 20, "fontSize": "16px"}),
+                dcc.Dropdown(
+                    id="metric-dd",
+                    options=[{"label": k, "value": v} for k, v in metrics_label_map.items()],
+                    value="rate_pct",
+                    clearable=False,
+                    style={"width": 320, "fontSize": "15px"}
+                ),
+                html.Label("County", style={"fontWeight": 600, "marginRight": 8, "marginLeft": 20, "fontSize": "16px"}),
+                dcc.Dropdown(
+                    id="county-dd",
+                    options=county_options,
+                    value=None,
+                    clearable=True,
+                    placeholder="Select a county…",
+                    style={"width": 300, "fontSize": "15px"}
+                ),
+                html.Button("Clear selection", id="clear-selection", n_clicks=0, style={"marginLeft": 12, "background": "#e2e8f0", "borderRadius": "6px", "border": "none", "padding": "6px 14px", "fontWeight": 500, "boxShadow": "0 1px 4px #0001", "cursor": "pointer"}),
+                html.Span(id="missing-note", style={"marginLeft": 12, "color": "#555", "fontSize": "14px"})
+            ], style={"display": "flex", "alignItems": "center", "gap": "8px", "flexWrap": "wrap"})
+        ], style={"marginBottom": "12px", "background": "#fff", "borderRadius": "10px", "boxShadow": "0 2px 12px #0001", "padding": "14px 10px"}),
 
         html.Div([
             html.Span("ℹ️", className="description-icon"),
@@ -1086,38 +1092,44 @@ def build_layout(
     coi_tab = html.Div([
         html.Div([
             html.H2("Georgia Child Opportunity Index", className="page-title", style={"marginBottom": "2px"}),
-            html.P("Pick a year/metric for the map. Click a county OR choose one from the dropdown to see its multi-year trend.", className="lead"),
+            html.P([
+                "The Child Opportunity Index (COI) measures children's access to resources and conditions that promote healthy development across neighborhoods. ",
+                html.A("Learn more", href="https://www.diversitydatakids.org/child-opportunity-index", target="_blank", style={"color": "#2563eb", "textDecoration": "underline"})
+            ], style={"fontSize": "14px", "color": "#4b5563", "marginBottom": "8px", "fontStyle": "italic"}),
         ], style={"marginBottom": "10px"}),
 
         html.Div([
-            html.Label("Year", style={"fontWeight": 600, "marginRight": 8, "fontSize": "16px"}),
-            dcc.Dropdown(
-                id="coi-year-dd",
-                options=[{"label": y, "value": y} for y in coi_years],
-                value=coi_years[-1] if coi_years else None,
-                clearable=False,
-                style={"width": 140, "fontSize": "15px"}
-            ),
-            html.Label("Metric", style={"fontWeight": 600, "marginRight": 8, "marginLeft": 20, "fontSize": "16px"}),
-            dcc.Dropdown(
-                id="coi-metric-dd",
-                options=[{"label": k, "value": v} for k, v in coi_metrics_label_map.items()],
-                value="z_COI_stt",
-                clearable=False,
-                style={"width": 320, "fontSize": "15px"}
-            ),
-            html.Label("County", style={"fontWeight": 600, "marginRight": 8, "marginLeft": 20, "fontSize": "16px"}),
-            dcc.Dropdown(
-                id="coi-county-dd",
-                options=county_options,
-                value=None,
-                clearable=True,
-                placeholder="Select a county…",
-                style={"width": 300, "fontSize": "15px"}
-            ),
-            html.Button("Clear selection", id="coi-clear-selection", n_clicks=0, style={"marginLeft": 12, "background": "#e2e8f0", "borderRadius": "6px", "border": "none", "padding": "6px 14px", "fontWeight": 500, "boxShadow": "0 1px 4px #0001", "cursor": "pointer"}),
-            html.Span(id="coi-missing-note", style={"marginLeft": 12, "color": "#555", "fontSize": "14px"})
-        ], style={"display": "flex", "alignItems": "center", "gap": "8px", "marginBottom": "12px", "flexWrap": "wrap", "background": "#fff", "borderRadius": "10px", "boxShadow": "0 2px 12px #0001", "padding": "14px 10px"}),
+            html.P("Pick a year/metric for the map. Click a county OR choose one from the dropdown to see its multi-year trend.", className="lead", style={"margin": "0 0 16px 0", "fontSize": "15px", "paddingBottom": "12px", "borderBottom": "1px solid #e5e7eb"}),
+            html.Div([
+                html.Label("Year", style={"fontWeight": 600, "marginRight": 8, "fontSize": "16px"}),
+                dcc.Dropdown(
+                    id="coi-year-dd",
+                    options=[{"label": y, "value": y} for y in coi_years],
+                    value=coi_years[-1] if coi_years else None,
+                    clearable=False,
+                    style={"width": 140, "fontSize": "15px"}
+                ),
+                html.Label("Metric", style={"fontWeight": 600, "marginRight": 8, "marginLeft": 20, "fontSize": "16px"}),
+                dcc.Dropdown(
+                    id="coi-metric-dd",
+                    options=[{"label": k, "value": v} for k, v in coi_metrics_label_map.items()],
+                    value="z_COI_stt",
+                    clearable=False,
+                    style={"width": 320, "fontSize": "15px"}
+                ),
+                html.Label("County", style={"fontWeight": 600, "marginRight": 8, "marginLeft": 20, "fontSize": "16px"}),
+                dcc.Dropdown(
+                    id="coi-county-dd",
+                    options=county_options,
+                    value=None,
+                    clearable=True,
+                    placeholder="Select a county…",
+                    style={"width": 300, "fontSize": "15px"}
+                ),
+                html.Button("Clear selection", id="coi-clear-selection", n_clicks=0, style={"marginLeft": 12, "background": "#e2e8f0", "borderRadius": "6px", "border": "none", "padding": "6px 14px", "fontWeight": 500, "boxShadow": "0 1px 4px #0001", "cursor": "pointer"}),
+                html.Span(id="coi-missing-note", style={"marginLeft": 12, "color": "#555", "fontSize": "14px"})
+            ], style={"display": "flex", "alignItems": "center", "gap": "8px", "flexWrap": "wrap"})
+        ], style={"marginBottom": "12px", "background": "#fff", "borderRadius": "10px", "boxShadow": "0 2px 12px #0001", "padding": "14px 10px"}),
 
         html.Div([
             html.Span("ℹ️", className="description-icon"),
