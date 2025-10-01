@@ -461,14 +461,14 @@ def make_map_figure(
     dfy["hover"] = (
         "<b style='color:#000; font-size:14px'>" + dfy["County"].fillna("Unknown") + " County</b><br><br>" +
         "<b style='color:#1f2937'>Demographics:</b><br>" +
-        "<span style='color:#111'>👥 Black Population: <b>" + dfy["black_population"].map(fmt_count) + "</b></span><br>" +
-        "<span style='color:#111'>📊 Total Recipients: <b>" + dfy["Recipients"].map(fmt_count) + "</b></span><br>" +
-        "<span style='color:#111'>🎯 Black Recipients: <b>" + dfy["Black Rec."].map(fmt_count) + "</b></span><br><br>" +
+        "<span style='color:#111'>Black Population: <b>" + dfy["black_population"].map(fmt_count) + "</b></span><br>" +
+        "<span style='color:#111'>Total Recipients: <b>" + dfy["Recipients"].map(fmt_count) + "</b></span><br>" +
+        "<span style='color:#111'>Black Recipients: <b>" + dfy["Black Rec."].map(fmt_count) + "</b></span><br><br>" +
         "<b style='color:#1f2937'>Metrics:</b><br>" +
-        "<span style='color:#111'>📈 % Black of Recipients: <b style='color:#dc2626'>" + dfy["rate_pct"].map(fmt_pct) + "</b></span><br>" +
-        "<span style='color:#111'>📉 % Black Recipients of Black Pop: <b style='color:#dc2626'>" + dfy["black_over_blackpop_pct"].map(fmt_pct) + "</b></span><br>" +
-        "<span style='color:#111'>👶 % Black Children in Poverty (TANF): <b style='color:#dc2626'>" + dfy["children_poverty_pct"].map(fmt_pct) + "</b></span><br>" +
-        "<span style='color:#111'>👨‍👩‍👧‍👦 % Black Families in Poverty (TANF): <b style='color:#dc2626'>" + dfy["families_poverty_pct"].map(fmt_pct) + "</b></span>"
+        "<span style='color:#111'>% Black of Recipients: <b style='color:#dc2626'>" + dfy["rate_pct"].map(fmt_pct) + "</b></span><br>" +
+        "<span style='color:#111'>% Black Recipients of Black Pop: <b style='color:#dc2626'>" + dfy["black_over_blackpop_pct"].map(fmt_pct) + "</b></span><br>" +
+        "<span style='color:#111'>% Black Children in Poverty (TANF): <b style='color:#dc2626'>" + dfy["children_poverty_pct"].map(fmt_pct) + "</b></span><br>" +
+        "<span style='color:#111'>% Black Families in Poverty (TANF): <b style='color:#dc2626'>" + dfy["families_poverty_pct"].map(fmt_pct) + "</b></span>"
     )
 
     # Split counties with and without the chosen metric so missing ones can be shown in gray
@@ -515,6 +515,7 @@ def make_map_figure(
         center={"lat": 32.5, "lon": -83.3},
         zoom=5.7,
         opacity=0.86,
+        
     )
 
     # Add a gray layer for missing counties (so they appear on the map and have hover info)
@@ -760,12 +761,12 @@ def make_coi_map_figure(
     dfy["hover"] = (
         "<b style='color:#000; font-size:14px'>" + dfy["County"].fillna("Unknown") + " County</b><br><br>" +
         "<b style='color:#1f2937'>Demographics:</b><br>" +
-        "<span style='color:#111'>👥 Population: <b>" + dfy["pop"].map(fmt_count) + "</b></span><br><br>" +
+        "<span style='color:#111'> Population: <b>" + dfy["pop"].map(fmt_count) + "</b></span><br><br>" +
         "<b style='color:#1f2937'>Child Opportunity Index Scores:</b><br>" +
-        "<span style='color:#111'>🎯 Overall COI: <b style='color:#dc2626'>" + dfy["z_COI_stt"].map(fmt_zscore) + "</b></span><br>" +
-        "<span style='color:#111'>📚 Education: <b style='color:#dc2626'>" + dfy["z_ED_stt"].map(fmt_zscore) + "</b></span><br>" +
-        "<span style='color:#111'>� Health & Environment: <b style='color:#dc2626'>" + dfy["z_HE_stt"].map(fmt_zscore) + "</b></span><br>" +
-        "<span style='color:#111'>👥 Social & Economic: <b style='color:#dc2626'>" + dfy["z_SE_stt"].map(fmt_zscore) + "</b></span>"
+        "<span style='color:#111'> Overall COI: <b style='color:#dc2626'>" + dfy["z_COI_stt"].map(fmt_zscore) + "</b></span><br>" +
+        "<span style='color:#111'> Education: <b style='color:#dc2626'>" + dfy["z_ED_stt"].map(fmt_zscore) + "</b></span><br>" +
+        "<span style='color:#111'> Health & Environment: <b style='color:#dc2626'>" + dfy["z_HE_stt"].map(fmt_zscore) + "</b></span><br>" +
+        "<span style='color:#111'> Social & Economic: <b style='color:#dc2626'>" + dfy["z_SE_stt"].map(fmt_zscore) + "</b></span>"
     )
 
     # Split counties with and without the chosen metric so missing ones can be shown in gray
@@ -791,7 +792,8 @@ def make_coi_map_figure(
             vmax = max(vmax, 0.5)  # Minimum range for visibility
         else:
             vmax = 2.0
-        color_scale = "RdBu_r"  # Red for negative (worse), Blue for positive (better)
+        # Custom diverging scale: red (low) -> white (mid) -> blue (high)
+        color_scale = [[0.0, 'rgb(214,39,40)'], [0.5, 'rgb(255,255,255)'], [1.0, 'rgb(31,119,180)']]
         vmin = -vmax
     elif kind == "count":
         vmin = 0
