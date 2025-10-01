@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typing import Dict, Tuple, List, Optional
+from functools import lru_cache
 
 import numpy as np
 import pandas as pd
@@ -57,6 +58,7 @@ def coerce_num(x):
 # Data Loaders
 # ======================
 
+@lru_cache(maxsize=4)
 def load_geojson(path: Path) -> Tuple[dict, Dict[str, str], Dict[str, str]]:
     """
     Load GA counties GeoJSON and build NAME<->GEOID maps.
@@ -206,6 +208,7 @@ def load_coi_dataset(csv_path: Path,
     return df
 
 
+@lru_cache(maxsize=1)
 def metrics_config() -> Tuple[Dict[str, str], Dict[str, str]]:
     """
     Returns:
@@ -229,6 +232,7 @@ def metrics_config() -> Tuple[Dict[str, str], Dict[str, str]]:
     return metrics, metric_fmt
 
 
+@lru_cache(maxsize=1)
 def coi_metrics_config() -> Tuple[Dict[str, str], Dict[str, str]]:
     """
     Returns:
@@ -251,6 +255,7 @@ def coi_metrics_config() -> Tuple[Dict[str, str], Dict[str, str]]:
     return metrics, metric_fmt
 
 
+@lru_cache(maxsize=1)
 def get_metric_descriptions() -> Dict[str, str]:
     """
     Returns descriptions for TANF metrics explaining what each metric means.
@@ -266,6 +271,7 @@ def get_metric_descriptions() -> Dict[str, str]:
     }
 
 
+@lru_cache(maxsize=1)
 def get_coi_metric_descriptions() -> Dict[str, str]:
     """
     Returns descriptions for Child Opportunity Index metrics explaining what each metric means.
@@ -760,6 +766,7 @@ def make_trend_figure(
     metric: str,
     metrics_label_map: Dict[str, str],
     metric_fmt: Dict[str, str],
+    state_averages: pd.DataFrame,
 ) -> Tuple[go.Figure, str]:
     """Build the line chart for a selected county."""
     title_label = [k for k, v in metrics_label_map.items() if v == metric][0]
@@ -768,8 +775,7 @@ def make_trend_figure(
 
     dfc = df[df["GEOID"] == sel_geoid].copy().sort_values("Year_num")
     
-    # Calculate state averages for baseline
-    state_averages = calculate_state_averages(df)
+    # Use pre-calculated state averages (passed as parameter)
     
     # Create a shorter y-axis label for better space utilization
     def shorten_label(label):
@@ -1378,6 +1384,7 @@ def register_callbacks(
     coi_metrics_label_map: Dict[str, str],
     coi_metric_fmt: Dict[str, str],
     cluster_df: pd.DataFrame,
+    state_averages: pd.DataFrame,
 ):
     """Wire all Dash callbacks."""
 
@@ -1401,6 +1408,7 @@ def register_callbacks(
     )
     def update_map(year, metric, cluster_toggle):
         show_clusters = "show_clusters" in (cluster_toggle or [])
+        
         fig, note = make_map_figure(
             df=df,
             geojson=geojson,
@@ -1461,6 +1469,7 @@ def register_callbacks(
             metric=metric,
             metrics_label_map=metrics_label_map,
             metric_fmt=metric_fmt,
+            state_averages=state_averages,
         )
         return fig, title
 
@@ -1498,15 +1507,15 @@ def register_callbacks(
         
         top_display = create_ranking_display(
             counties=top_counties,
-            title=f"Top 5 Counties - {metric_label}",
-            icon="🏆",
+            title=f"Highest 5 Counties - {metric_label}",
+            icon="",
             is_top=True
         )
         
         bottom_display = create_ranking_display(
             counties=bottom_counties,
-            title=f"Bottom 5 Counties - {metric_label}",
-            icon="🔻",
+            title=f"Lowest 5 Counties - {metric_label}",
+            icon="",
             is_top=False
         )
         
@@ -1547,15 +1556,15 @@ def register_callbacks(
         
         top_display = create_ranking_display(
             counties=top_counties,
-            title=f"Top 5 Counties - {metric_label}",
-            icon="🏆",
+            title=f"Highest 5 Counties - {metric_label}",
+            icon="",
             is_top=True
         )
         
         bottom_display = create_ranking_display(
             counties=bottom_counties,
-            title=f"Bottom 5 Counties - {metric_label}", 
-            icon="🔻",
+            title=f"Lowest 5 Counties - {metric_label}", 
+            icon="",
             is_top=False
         )
         
@@ -1639,10 +1648,15 @@ def create_app(geojson_path: Path = GEOJSON_PATH,
     App factory. Loads data, builds layout, and registers callbacks.
     Returns a ready-to-run Dash app.
     """
+    # Load data normally for now - caching was causing issues
     geojson, name_to_geoid, geoid_to_name = load_geojson(geojson_path)
     df = load_dataset(csv_path, name_to_geoid)
     coi_df = load_coi_dataset(coi_csv_path, name_to_geoid)
     cluster_df = load_cluster_dataset(cluster_csv_path, name_to_geoid)
+    
+    # Pre-calculate state averages for performance
+    state_averages = calculate_state_averages(df)
+    
     metrics, metric_fmt = metrics_config()
     coi_metrics, coi_metric_fmt = coi_metrics_config()
     years = sorted(df["year"].dropna().unique())
@@ -1650,8 +1664,12 @@ def create_app(geojson_path: Path = GEOJSON_PATH,
 
     app = dash.Dash(__name__)
     app.title = "GA Social Analytics Dashboard"
+    
     app.layout = build_layout(app, years, coi_years, geoid_to_name, metrics, coi_metrics)
-    register_callbacks(app, df, coi_df, geojson, geoid_to_name, metrics, metric_fmt, coi_metrics, coi_metric_fmt, cluster_df)
+    register_callbacks(
+        app, df, coi_df, geojson, geoid_to_name, metrics, metric_fmt, 
+        coi_metrics, coi_metric_fmt, cluster_df, state_averages
+    )
     return app
 
 

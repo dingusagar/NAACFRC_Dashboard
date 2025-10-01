@@ -139,30 +139,30 @@ body {
 
 /* County ranking styles */
 .top-performer {
-  background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%);
-  border: 1px solid #bbf7d0;
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  border: 1px solid #cbd5e1;
   border-radius: 8px;
   padding: 16px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
 .bottom-performer {
-  background: linear-gradient(135deg, #fef2f2 0%, #fef7f7 100%);
-  border: 1px solid #fecaca;
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  border: 1px solid #cbd5e1;
   border-radius: 8px;
   padding: 16px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
 .top-performer h4 {
-  color: #166534;
+  color: #374151;
   margin: 0 0 12px 0;
   font-size: 16px;
   font-weight: 600;
 }
 
 .bottom-performer h4 {
-  color: #991b1b;
+  color: #374151;
   margin: 0 0 12px 0;
   font-size: 16px;
   font-weight: 600;
@@ -201,11 +201,13 @@ body {
 }
 
 .top-performer .county-value {
-  color: #059669;
+  color: #1f2937;
+  font-weight: 600;
 }
 
 .bottom-performer .county-value {
-  color: #dc2626;
+  color: #1f2937;
+  font-weight: 600;
 }
 
 /* Citation box styles */
