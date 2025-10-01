@@ -26,6 +26,7 @@ import plotly.graph_objects as go
 GEOJSON_PATH = Path("data/ga_counties.geojson")
 TANF_CSV     = Path("data/tanf_with_census.csv")
 COI_CSV      = Path("data/child_opportunity_index_georgia_filtered.csv")
+CLUSTER_CSV  = Path("data/tanf_clustered.csv")
 
 
 # ======================
@@ -142,6 +143,27 @@ def load_dataset(csv_path: Path,
     # For sorting in line charts
     df["Year_num"] = pd.to_numeric(df["year"], errors="coerce")
 
+    return df
+
+
+def load_cluster_dataset(csv_path: Path,
+                        name_to_geoid: Dict[str, str]) -> pd.DataFrame:
+    """
+    Load the TANF clustering CSV.
+    Expects columns: county_name, 2017, 2018, 2019, 2020, 2021, cluster
+    """
+    df = pd.read_csv(csv_path)
+    df.rename(columns={c: c.strip() for c in df.columns}, inplace=True)
+    
+    # Clean county names to match the main dataset
+    df["county_name"] = clean_county_name(df["county_name"])
+    
+    # Create GEOID mapping - try name-based mapping first
+    df["GEOID"] = df["county_name"].map(name_to_geoid)
+    
+    # Remove rows where we couldn't map the county
+    df = df[df["GEOID"].notna()].copy()
+    
     return df
 
 
@@ -439,8 +461,15 @@ def make_map_figure(
     metric: str,
     metrics_label_map: Dict[str, str],
     metric_fmt: Dict[str, str],
+    cluster_df: Optional[pd.DataFrame] = None,
+    show_clusters: bool = False,
 ) -> Tuple[go.Figure, str]:
     """Build the choropleth map and the 'missing data' note."""
+    
+    # Check if we should show clusters instead of metric values
+    if show_clusters and cluster_df is not None and metric == "families_poverty_pct":
+        return make_cluster_map_figure(geojson, geoid_to_name, cluster_df)
+    
     dfy = df[df["year"] == str(year)].copy()
 
     # Ensure all counties appear, even if missing for that year
@@ -588,6 +617,125 @@ def make_map_figure(
         # Fallback: do nothing if assignment fails
         pass
 
+    return fig, note
+
+
+def make_cluster_map_figure(
+    geojson: dict,
+    geoid_to_name: Dict[str, str],
+    cluster_df: pd.DataFrame,
+) -> Tuple[go.Figure, str]:
+    """Build the cluster choropleth map."""
+    
+    # Ensure all counties appear
+    base = pd.DataFrame({"GEOID": list(geoid_to_name.keys())})
+    dfy = base.merge(cluster_df[["GEOID", "cluster"]], on="GEOID", how="left")
+    dfy["County"] = dfy["GEOID"].map(geoid_to_name)
+    
+    # Create hover text for clusters
+    def fmt_cluster(c):
+        if pd.isna(c):
+            return "No cluster data"
+        else:
+            return f"Cluster {int(c)}"
+    
+    dfy["hover"] = (
+        "<b style='color:#000; font-size:14px'>" + dfy["County"].fillna("Unknown") + " County</b><br><br>" +
+        "<b style='color:#1f2937'>Trend Analysis:</b><br>" +
+        "<span style='color:#111'>📊 " + dfy["cluster"].map(fmt_cluster) + "</span><br>" +
+        "<span style='color:#666; font-size:12px'>Based on 2017-2021 TANF coverage trends</span>"
+    )
+    
+    # Split counties with and without cluster data
+    df_have = dfy[dfy["cluster"].notna()].copy()
+    df_missing = dfy[dfy["cluster"].isna()].copy()
+    
+    if not df_missing.empty:
+        df_missing["hover_missing"] = (
+            "<b style='color:#000; font-size:14px'>" + df_missing["County"].fillna("Unknown") + " County</b><br><br>" +
+            "<b style='color:#dc2626'>⚠️ No cluster data available</b>"
+        )
+    
+    n_total = len(dfy)
+    n_missing = dfy["cluster"].isna().sum()
+    note = f"{n_missing}/{n_total} counties missing cluster data."
+    
+    # Use categorical colors for clusters
+    cluster_colors = {1: "#3b82f6", 2: "#ef4444", 3: "#f59e0b"}  # Blue, Red, Orange
+    
+    fig = go.Figure()
+    
+    # Add each cluster as a separate trace for better legend control
+    for cluster_id in sorted(df_have["cluster"].dropna().unique()):
+        cluster_data = df_have[df_have["cluster"] == cluster_id]
+        if not cluster_data.empty:
+            fig.add_trace(go.Choroplethmapbox(
+                geojson=geojson,
+                locations=cluster_data["GEOID"],
+                z=[cluster_id] * len(cluster_data),  # Use cluster ID as z value
+                featureidkey="properties.GEOID",
+                colorscale=[[0, cluster_colors.get(cluster_id, "#666666")], 
+                           [1, cluster_colors.get(cluster_id, "#666666")]],
+                showscale=False,
+                marker_opacity=0.86,
+                marker_line_width=0.8,
+                marker_line_color="#ffffff",
+                name=f"Cluster {int(cluster_id)}",
+                customdata=cluster_data["hover"].values.reshape(-1, 1),
+                hovertemplate="%{customdata[0]}<extra></extra>",
+            ))
+    
+    # Add missing counties in gray
+    if not df_missing.empty:
+        fig.add_trace(go.Choroplethmapbox(
+            geojson=geojson,
+            locations=df_missing["GEOID"],
+            z=[0] * len(df_missing),
+            featureidkey="properties.GEOID",
+            colorscale=[[0, "lightgray"], [1, "lightgray"]],
+            showscale=False,
+            marker_opacity=0.86,
+            marker_line_width=0.8,
+            marker_line_color="#ffffff",
+            name="No Data",
+            customdata=df_missing["hover_missing"].values.reshape(-1, 1),
+            hovertemplate="%{customdata[0]}<extra></extra>",
+        ))
+    
+    # Optimized Georgia bounds
+    fig.update_layout(
+        margin={"r": 0, "t": 0, "l": 0, "b": 0},
+        showlegend=True,
+        legend=dict(
+            orientation="v",
+            yanchor="top",
+            y=1,
+            xanchor="left",
+            x=1.02,
+            font=dict(size=12, family="Inter")
+        ),
+        hoverlabel=dict(
+            bgcolor="rgba(255, 255, 255, 0.95)",
+            bordercolor="#e5e7eb",
+            font_size=13,
+            font_family="Inter"
+        ),
+        mapbox={
+            "style": "carto-positron",
+            "center": {"lat": 32.5, "lon": -83.3},
+            "zoom": 6.2,  # Increased zoom for better Georgia focus
+            "layers": [
+                {
+                    "sourcetype": "geojson",
+                    "source": geojson,
+                    "type": "line",
+                    "color": "#6b7280",
+                    "line": {"width": 0.8},
+                }
+            ],
+        },
+    )
+    
     return fig, note
 
 
@@ -1045,7 +1193,18 @@ def build_layout(
                 ),
                 html.Button("Clear selection", id="clear-selection", n_clicks=0, style={"marginLeft": 12, "background": "#e2e8f0", "borderRadius": "6px", "border": "none", "padding": "6px 14px", "fontWeight": 500, "boxShadow": "0 1px 4px #0001", "cursor": "pointer"}),
                 html.Span(id="missing-note", style={"marginLeft": 12, "color": "#555", "fontSize": "14px"})
-            ], style={"display": "flex", "alignItems": "center", "gap": "8px", "flexWrap": "wrap"})
+            ], style={"display": "flex", "alignItems": "center", "gap": "8px", "flexWrap": "wrap"}),
+            
+            # Cluster toggle - only show for families poverty metric
+            html.Div(id="cluster-toggle-container", children=[
+                html.Label("Cluster counties based on yearly trends", style={"fontWeight": 500, "marginRight": 8, "fontSize": "14px", "color": "#374151"}),
+                dcc.Checklist(
+                    id="cluster-toggle",
+                    options=[{"label": "", "value": "show_clusters"}],
+                    value=[],
+                    style={"display": "inline-block"}
+                )
+            ], style={"marginTop": "8px", "paddingTop": "8px", "borderTop": "1px solid #e5e7eb", "display": "none"})
         ], style={"marginBottom": "12px", "background": "#fff", "borderRadius": "10px", "boxShadow": "0 2px 12px #0001", "padding": "14px 10px"}),
 
         html.Div([
@@ -1218,16 +1377,30 @@ def register_callbacks(
     metric_fmt: Dict[str, str],
     coi_metrics_label_map: Dict[str, str],
     coi_metric_fmt: Dict[str, str],
+    cluster_df: pd.DataFrame,
 ):
     """Wire all Dash callbacks."""
+
+    @app.callback(
+        Output("cluster-toggle-container", "style"),
+        Input("metric-dd", "value")
+    )
+    def show_cluster_toggle(metric):
+        """Show cluster toggle only for families poverty metric."""
+        if metric == "families_poverty_pct":
+            return {"marginTop": "8px", "paddingTop": "8px", "borderTop": "1px solid #e5e7eb", "display": "block"}
+        else:
+            return {"display": "none"}
 
     @app.callback(
         Output("map", "figure"),
         Output("missing-note", "children"),
         Input("year-dd", "value"),
-        Input("metric-dd", "value")
+        Input("metric-dd", "value"),
+        Input("cluster-toggle", "value")
     )
-    def update_map(year, metric):
+    def update_map(year, metric, cluster_toggle):
+        show_clusters = "show_clusters" in (cluster_toggle or [])
         fig, note = make_map_figure(
             df=df,
             geojson=geojson,
@@ -1236,6 +1409,8 @@ def register_callbacks(
             metric=metric,
             metrics_label_map=metrics_label_map,
             metric_fmt=metric_fmt,
+            cluster_df=cluster_df,
+            show_clusters=show_clusters,
         )
         return fig, note
 
@@ -1458,7 +1633,8 @@ def register_callbacks(
 
 def create_app(geojson_path: Path = GEOJSON_PATH,
                csv_path: Path = TANF_CSV,
-               coi_csv_path: Path = COI_CSV) -> dash.Dash:
+               coi_csv_path: Path = COI_CSV,
+               cluster_csv_path: Path = CLUSTER_CSV) -> dash.Dash:
     """
     App factory. Loads data, builds layout, and registers callbacks.
     Returns a ready-to-run Dash app.
@@ -1466,6 +1642,7 @@ def create_app(geojson_path: Path = GEOJSON_PATH,
     geojson, name_to_geoid, geoid_to_name = load_geojson(geojson_path)
     df = load_dataset(csv_path, name_to_geoid)
     coi_df = load_coi_dataset(coi_csv_path, name_to_geoid)
+    cluster_df = load_cluster_dataset(cluster_csv_path, name_to_geoid)
     metrics, metric_fmt = metrics_config()
     coi_metrics, coi_metric_fmt = coi_metrics_config()
     years = sorted(df["year"].dropna().unique())
@@ -1474,7 +1651,7 @@ def create_app(geojson_path: Path = GEOJSON_PATH,
     app = dash.Dash(__name__)
     app.title = "GA Social Analytics Dashboard"
     app.layout = build_layout(app, years, coi_years, geoid_to_name, metrics, coi_metrics)
-    register_callbacks(app, df, coi_df, geojson, geoid_to_name, metrics, metric_fmt, coi_metrics, coi_metric_fmt)
+    register_callbacks(app, df, coi_df, geojson, geoid_to_name, metrics, metric_fmt, coi_metrics, coi_metric_fmt, cluster_df)
     return app
 
 
