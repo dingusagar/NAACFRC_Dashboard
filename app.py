@@ -1315,7 +1315,7 @@ def build_layout(
         dcc.Loading(
             id="coi-trend-loading",
             type="default",
-            children=dcc.Graph(id="coi-trend", style={"height": "32vh", "background": "#fff", "borderRadius": "12px", "boxShadow": "0 2px 12px #0001"}),
+            children=dcc.Graph(id="coi-trend", figure=make_empty_trend("Overall COI Z-Score"), style={"height": "32vh", "background": "#fff", "borderRadius": "12px", "boxShadow": "0 2px 12px #0001"}),
             fullscreen=False,
         ),
 
@@ -1629,6 +1629,7 @@ def register_callbacks(
         Input("coi-sel-geoid", "data"),
         Input("coi-sel-name", "data"),
         Input("coi-metric-dd", "value"),
+        prevent_initial_call=True,
     )
     def update_coi_trend(sel_geoid, sel_name, metric):
         fig, title = make_coi_trend_figure(
