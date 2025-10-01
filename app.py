@@ -1008,12 +1008,9 @@ def build_layout(
 
     tanf_tab = html.Div([
         html.Div([
-            html.Img(src="/assets/logo.webp", style={"height": "44px", "marginRight": "16px", "borderRadius": "8px", "boxShadow": "0 2px 8px #0001"}),
-            html.Div([
-                html.H2("Georgia TANF Enrollment Trends", className="page-title", style={"marginBottom": "2px"}),
-                html.P("Pick a year/metric for the map. Click a county OR choose one from the dropdown to see its multi-year trend.", className="lead"),
-            ], style={"display": "flex", "flexDirection": "column"})
-        ], style={"display": "flex", "alignItems": "center", "gap": "12px", "marginBottom": "10px"}),
+            html.H2("Georgia TANF Enrollment Trends", className="page-title", style={"marginBottom": "2px"}),
+            html.P("Pick a year/metric for the map. Click a county OR choose one from the dropdown to see its multi-year trend.", className="lead"),
+        ], style={"marginBottom": "10px"}),
 
         html.Div([
             html.Label("Year", style={"fontWeight": 600, "marginRight": 8, "fontSize": "16px"}),
@@ -1088,12 +1085,9 @@ def build_layout(
 
     coi_tab = html.Div([
         html.Div([
-            html.Img(src="/assets/logo.webp", style={"height": "44px", "marginRight": "16px", "borderRadius": "8px", "boxShadow": "0 2px 8px #0001"}),
-            html.Div([
-                html.H2("Georgia Child Opportunity Index", className="page-title", style={"marginBottom": "2px"}),
-                html.P("Pick a year/metric for the map. Click a county OR choose one from the dropdown to see its multi-year trend.", className="lead"),
-            ], style={"display": "flex", "flexDirection": "column"})
-        ], style={"display": "flex", "alignItems": "center", "gap": "12px", "marginBottom": "10px"}),
+            html.H2("Georgia Child Opportunity Index", className="page-title", style={"marginBottom": "2px"}),
+            html.P("Pick a year/metric for the map. Click a county OR choose one from the dropdown to see its multi-year trend.", className="lead"),
+        ], style={"marginBottom": "10px"}),
 
         html.Div([
             html.Label("Year", style={"fontWeight": 600, "marginRight": 8, "fontSize": "16px"}),
@@ -1188,8 +1182,14 @@ def build_layout(
                "margin": "0 auto", "maxWidth": "1200px", "padding": "18px", "background": "#f8fafc"},
         children=[
             html.Div([
-                html.Div("GA Social Analytics Dashboard", className="brand", style={"fontSize": "28px", "fontWeight": 700, "color": "#2b6cb0", "marginBottom": "2px"}),
-                html.Div("Insights and county-level trends", className="brand-sub", style={"color": "#6b7280", "fontSize": "16px"}),
+                html.Div([
+                    html.Img(src="/assets/logo_naacfrc.webp", style={"height": "50px", "marginRight": "12px", "borderRadius": "8px", "boxShadow": "0 2px 8px #0001"}),
+                    html.Img(src="/assets/logo_gatech.png", style={"height": "50px", "marginRight": "16px", "borderRadius": "8px", "boxShadow": "0 2px 8px #0001"}),
+                    html.Div([
+                        html.Div("GA Social Analytics Dashboard", className="brand", style={"fontSize": "28px", "fontWeight": 700, "color": "#2b6cb0", "marginBottom": "2px"}),
+                        html.Div("Insights and county-level trends", className="brand-sub", style={"color": "#6b7280", "fontSize": "16px"}),
+                    ], style={"display": "flex", "flexDirection": "column"})
+                ], style={"display": "flex", "alignItems": "center", "gap": "8px"})
             ], className="header", style={"marginBottom": "18px"}),
             tabs
         ]
